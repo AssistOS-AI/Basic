@@ -435,33 +435,21 @@ test('manifest gates AgentServer startup on nested-bwrap healthcheck and builds 
     assert.strictEqual(manifest.profiles.default.preinstall, 'scripts/build-image.sh');
 });
 
-test('Dockerfile ships the generic Python runtime but no backend-specific packages', () => {
+test('image publishing assets are centralized outside the Basic source repo', () => {
     const dockerfilePath = path.resolve(__dirname, '../../bwrap-runner/Dockerfile');
-    const dockerfile = fs.readFileSync(dockerfilePath, 'utf8');
+    const workflowPath = path.resolve(__dirname, '../../.github/workflows/publish-bwrap-runner.yml');
+    const buildScriptPath = path.resolve(__dirname, '../../bwrap-runner/scripts/build-image.sh');
+    const buildScript = fs.readFileSync(buildScriptPath, 'utf8');
 
-    assert.match(dockerfile, /^FROM node:24\.15\.0-bookworm-slim$/m);
-    assert.match(dockerfile, /python3\b/);
-    assert.match(dockerfile, /python3-pip\b/);
-    assert.match(dockerfile, /python3-dev\b/);
-    assert.match(dockerfile, /python3-venv\b/);
-    assert.match(dockerfile, /build-essential\b/);
-    assert.doesNotMatch(dockerfile, /open-interpreter/);
-    assert.doesNotMatch(dockerfile, /from interpreter import interpreter/);
-    assert.doesNotMatch(dockerfile, /research-open-interpreter/);
+    assert.ok(!fs.existsSync(dockerfilePath), 'bwrap-runner Dockerfile is owned by container-image-builds');
+    assert.ok(!fs.existsSync(workflowPath), 'Docker Hub publish workflow is owned by container-image-builds');
+    assert.match(buildScript, /container-image-builds\/images\/bwrap-runner\/Dockerfile/);
+    assert.match(buildScript, /BWRAP_RUNNER_DOCKERFILE/);
+    assert.match(buildScript, /\$runtime"\s+pull\s+"\$image"/);
+    assert.doesNotMatch(buildScript, /-f Dockerfile/);
 
     const shimPath = path.resolve(__dirname, '../../bwrap-runner/bin/research-open-interpreter');
     assert.ok(!fs.existsSync(shimPath), 'backend-specific shim must not ship with bwrap-runner');
-});
-
-test('Dockerfile installs the local sandbox runner at a stable image path', () => {
-    const dockerfilePath = path.resolve(__dirname, '../../bwrap-runner/Dockerfile');
-    const dockerfile = fs.readFileSync(dockerfilePath, 'utf8');
-    assert.match(dockerfile, /COPY\s+bin\/\s+\/opt\/bwrap-runner\/bin\//,
-        'bin/ must be copied to /opt/bwrap-runner/bin/ in the image');
-    assert.match(dockerfile, /COPY\s+lib\/\s+\/opt\/bwrap-runner\/lib\//,
-        'lib/ must be copied to /opt/bwrap-runner/lib/ in the image');
-    assert.match(dockerfile, /\/usr\/local\/bin\/bwrap-sandbox-exec/,
-        'image must install a /usr/local/bin/bwrap-sandbox-exec wrapper');
 });
 
 test('agent is catalogued as a normal Basic repository agent', () => {
@@ -474,20 +462,4 @@ test('agent is catalogued as a normal Basic repository agent', () => {
     assert.ok(fs.existsSync(mcpConfigPath), 'mcp-config.json must exist at the Basic agent root');
     assert.ok(fs.existsSync(buildScriptPath), 'image build preinstall script must exist');
     assert.ok((fs.statSync(buildScriptPath).mode & 0o111) !== 0, 'image build script must be executable');
-});
-
-test('publish workflow builds the Docker Hub image from Linux for both supported architectures', () => {
-    const workflowPath = path.resolve(__dirname, '../../.github/workflows/publish-bwrap-runner.yml');
-    const workflow = fs.readFileSync(workflowPath, 'utf8');
-
-    assert.match(workflow, /^  workflow_dispatch:\s*$/m);
-    assert.doesNotMatch(workflow, /^  push:\s*$/m);
-    assert.match(workflow, /runs-on:\s*ubuntu-latest/);
-    assert.match(workflow, /docker\/setup-buildx-action@v3/);
-    assert.match(workflow, /docker\/login-action@v3/);
-    assert.match(workflow, /docker\/build-push-action@v6/);
-    assert.match(workflow, /IMAGE_NAME:\s*assistos\/bwrap-runner/);
-    assert.match(workflow, /IMAGE_TAG:\s*node24-python-bookworm/);
-    assert.match(workflow, /platforms:\s*linux\/amd64,linux\/arm64/);
-    assert.match(workflow, /password:\s*\$\{\{\s*secrets\.DOCKERHUB_TOKEN\s*\}\}/);
 });

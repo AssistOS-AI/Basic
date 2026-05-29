@@ -55,12 +55,15 @@ shim directly, import the library modules, or call the CLI through
 `node /opt/bwrap-runner/bin/sandbox-exec.mjs`; they must not depend on a
 remote `sandbox_exec` MCP tool.
 
-The canonical published image must be produced by the repository GitHub
-Actions workflow `.github/workflows/publish-bwrap-runner.yml`. That workflow
-must be manual-dispatch only through `workflow_dispatch`; it must not publish
-automatically on `push` or other repository events. When dispatched, it must
-run on a Linux GitHub runner, use Docker Buildx, authenticate to Docker Hub
-with the repository secret `DOCKERHUB_TOKEN`, and publish
+The canonical published image must be produced by the manual GitHub Actions
+workflow `publish-bwrap-runner.yml` in `AssistOS-AI/container-image-builds`.
+That workflow checks out this repository as the build context and uses
+`container-image-builds/images/bwrap-runner/Dockerfile` as the centralized
+Dockerfile. It must be manual-dispatch only through `workflow_dispatch`; it
+must not publish automatically on `push` or other repository events. When
+dispatched, it must run on a Linux GitHub runner, use Docker Buildx,
+authenticate to Docker Hub with the `DOCKERHUB_TOKEN` secret in
+`AssistOS-AI/container-image-builds`, and publish
 `assistos/bwrap-runner:node24-python-bookworm` for both `linux/amd64` and
 `linux/arm64`. Local Podman or Docker builds are development and smoke-test
 helpers only; they must not be treated as the release publishing authority.

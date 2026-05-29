@@ -57,8 +57,9 @@
                 <code>BWRAP_RUNNER_IMAGE</code> and
                 runs
                 <code>scripts/build-image.sh</code> as a host preinstall hook
-                so a local Podman or Docker image is built before container
-                creation if missing.
+                so a missing local image is built from the sibling
+                <code>container-image-builds</code> checkout when available, or
+                pulled from Docker Hub before container creation.
                 Provider manifests that spawn inner bwrap jobs must request
                 <code>containerSecurity.privileged: true</code> because each
                 provider container is itself a sandbox host for inner
@@ -69,11 +70,13 @@
                 agents invoke that shim or the underlying CLI directly inside
                 their own container; they must not depend on a remote
                 <code>sandbox_exec</code> MCP tool.
-                The published image is produced by
-                manually dispatching
-                <code>.github/workflows/publish-bwrap-runner.yml</code>. It
-                runs on a Linux GitHub runner with Docker Buildx, pushes to
-                Docker Hub for both <code>linux/amd64</code> and
+                The published image is produced by manually dispatching
+                <code>publish-bwrap-runner.yml</code> in
+                <code>AssistOS-AI/container-image-builds</code>. That workflow
+                checks out this repository as the build context, uses the
+                centralized Dockerfile from
+                <code>container-image-builds/images/bwrap-runner/Dockerfile</code>,
+                pushes to Docker Hub for both <code>linux/amd64</code> and
                 <code>linux/arm64</code>, and must not publish automatically
                 on repository pushes.
             </p>

@@ -28,18 +28,21 @@ Open Interpreter. Those runtimes are owned by the provider agent. The default
 profile exposes `BWRAP_RUNNER_IMAGE` with the same default for the host
 `preinstall` hook. That hook runs
 `scripts/build-image.sh`; if the image is missing locally, the script builds it
-with Podman or Docker before container creation.
+with Podman or Docker from the sibling `container-image-builds` checkout when
+available, otherwise it pulls the published Docker Hub image before container
+creation.
 Provider manifests that spawn inner bwrap jobs must request
 `containerSecurity.privileged: true` so the outer OCI runtime permits the inner
 bubblewrap sandbox to create namespaces and mount `/proc`.
 
-The canonical published image is built by manually dispatching the GitHub
-Actions workflow `.github/workflows/publish-bwrap-runner.yml`. The workflow
-runs on `ubuntu-latest` and pushes to Docker Hub as
-`assistos/bwrap-runner:node24-python-bookworm` for both `linux/amd64` and
-`linux/arm64`. It must not publish automatically on repository pushes. Local
-image builds are still useful for development smoke tests, but they are not
-the publishing authority.
+The canonical published image is built by manually dispatching
+`publish-bwrap-runner.yml` in `AssistOS-AI/container-image-builds`. That
+workflow checks out this repository as the build context, uses the centralized
+Dockerfile from `container-image-builds/images/bwrap-runner/Dockerfile`, and
+pushes to Docker Hub as `assistos/bwrap-runner:node24-python-bookworm` for both
+`linux/amd64` and `linux/arm64`. It must not publish automatically on
+repository pushes. Local image builds are still useful for development smoke
+tests, but they are not the release publishing authority.
 
 ## Scope
 
