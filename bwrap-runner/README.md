@@ -1,7 +1,7 @@
 # bwrap-runner
 
 Shared Basic sandbox image and local runner for bounded one-off commands inside
-nested bubblewrap sandboxes from a Debian-based Node and Python container.
+nested bubblewrap sandboxes from a Debian-based Node and Python container. 
 
 ## Installation
 
