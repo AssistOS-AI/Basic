@@ -1,5 +1,5 @@
 {
-  "container": "assistos/webtty-agent:node24",
+  "container": "docker.io/assistos/webtty-agent:node24",
   "about": "Browser terminal that runs bash inside an isolated container, scoped to a workspace folder.",
   "start": "node /opt/webtty-agent/server.mjs",
   "readiness": {
