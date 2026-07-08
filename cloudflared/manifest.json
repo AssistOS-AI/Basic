@@ -17,6 +17,16 @@
       ]
     }
   },
+  "ideSettings": [
+    {
+      "key": "cloudflared-settings",
+      "label": "Cloudflare Tunnel",
+      "scope": "workspace",
+      "pluginKey": "cloudflared/cloudflared-settings",
+      "settingsComponent": "cloudflared-settings",
+      "adminOnly": true
+    }
+  ],
   "profiles": {
     "default": {
       "mounts": {
@@ -50,6 +60,14 @@
         },
         "CLOUDFLARED_STATUS_FILE": {
           "default": "/root/cloudflared/status.json"
+        }
+      }
+    },
+    "local-test": {
+      "env": {
+        "TUNNEL_TOKEN": {
+          "required": false,
+          "default": ""
         }
       }
     }

@@ -1,0 +1,201 @@
+.cloudflared-settings-modal {
+    width: min(960px, calc(100vw - 40px));
+    max-height: min(820px, calc(100vh - 40px));
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.cloudflared-settings-body {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 18px 20px 22px;
+    overflow: auto;
+}
+
+.cloudflared-status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.cloudflared-status-card {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 6px;
+    border: 1px solid #d7dde4;
+    border-radius: 8px;
+    padding: 12px;
+    background: #fbfcfd;
+}
+
+.cloudflared-status-label {
+    color: #5a6472;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.cloudflared-status-card strong {
+    overflow-wrap: anywhere;
+    color: #19212c;
+    font-size: 15px;
+    line-height: 1.3;
+}
+
+.cloudflared-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.cloudflared-toolbar-title {
+    color: #19212c;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.cloudflared-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.cloudflared-route-shell {
+    overflow-x: auto;
+    border: 1px solid #d7dde4;
+    border-radius: 8px;
+}
+
+.cloudflared-route-table {
+    width: 100%;
+    min-width: 820px;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.cloudflared-route-table th,
+.cloudflared-route-table td {
+    border-bottom: 1px solid #e8ecf1;
+    padding: 10px 8px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.cloudflared-route-table th {
+    background: #f4f6f8;
+    color: #4a5564;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.cloudflared-route-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.cloudflared-route-table th:nth-child(1),
+.cloudflared-route-table td:nth-child(1),
+.cloudflared-route-table th:nth-child(6),
+.cloudflared-route-table td:nth-child(6) {
+    width: 72px;
+    text-align: center;
+}
+
+.cloudflared-route-table th:nth-child(2),
+.cloudflared-route-table td:nth-child(2) {
+    width: 210px;
+}
+
+.cloudflared-route-table th:nth-child(3),
+.cloudflared-route-table td:nth-child(3) {
+    width: 130px;
+}
+
+.cloudflared-route-table th:nth-child(4),
+.cloudflared-route-table td:nth-child(4) {
+    width: 190px;
+}
+
+.cloudflared-route-table .form-input {
+    width: 100%;
+    min-width: 0;
+}
+
+.cloudflared-remove-button {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 6px;
+}
+
+.cloudflared-dns-toggle {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    gap: 8px;
+    color: #19212c;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.cloudflared-ingress-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#cloudflaredIngressPreview {
+    min-height: 150px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    resize: vertical;
+}
+
+.cloudflared-settings-status {
+    min-height: 22px;
+    color: #4a5564;
+    font-size: 14px;
+}
+
+.cloudflared-settings-status.success {
+    color: #166534;
+}
+
+.cloudflared-settings-status.error {
+    color: #b42318;
+}
+
+.cloudflared-settings-status.warning {
+    color: #9a5b00;
+}
+
+.cloudflared-busy .general-button {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+@media (max-width: 760px) {
+    .cloudflared-settings-modal {
+        width: calc(100vw - 20px);
+        max-height: calc(100vh - 20px);
+    }
+
+    .cloudflared-status-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .cloudflared-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .cloudflared-toolbar-actions {
+        justify-content: flex-start;
+    }
+}

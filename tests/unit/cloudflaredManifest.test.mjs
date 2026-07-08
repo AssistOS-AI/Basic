@@ -49,6 +49,35 @@ test('cloudflared manifest maps the required tunnel token from a workspace varia
     });
 });
 
+test('cloudflared manifest exposes an admin-only Explorer settings dashboard', () => {
+    const manifest = readCloudflaredManifest();
+
+    assert.deepEqual(manifest.ideSettings, [
+        {
+            key: 'cloudflared-settings',
+            label: 'Cloudflare Tunnel',
+            scope: 'workspace',
+            pluginKey: 'cloudflared/cloudflared-settings',
+            settingsComponent: 'cloudflared-settings',
+            adminOnly: true,
+        },
+    ]);
+
+    const pluginDir = path.join(repoRoot, 'cloudflared', 'IDE-plugins', 'cloudflared-settings');
+    for (const fileName of [
+        'config.json',
+        'cloudflared-settings.html',
+        'cloudflared-settings.css',
+        'cloudflared-settings.js',
+    ]) {
+        assert.equal(
+            fs.existsSync(path.join(pluginDir, fileName)),
+            true,
+            `cloudflared settings plugin must include ${fileName}`,
+        );
+    }
+});
+
 test('cloudflared manifest does not declare direct public or router exposure fields', () => {
     const manifest = readCloudflaredManifest();
     const profiles = manifest.profiles || {};
@@ -81,15 +110,24 @@ test('cloudflared manifest keeps the documented about string stable', () => {
     );
 });
 
-test('cloudflared manifest defines only the default profile', () => {
+test('cloudflared manifest keeps production strict and provides local-test dashboard mode', () => {
     const manifest = readCloudflaredManifest();
 
-    assert.deepEqual(Object.keys(manifest.profiles || {}), ['default']);
+    assert.deepEqual(Object.keys(manifest.profiles || {}), ['default', 'local-test']);
+    assert.deepEqual(manifest.profiles['local-test'].env.TUNNEL_TOKEN, {
+        required: false,
+        default: '',
+    });
     for (const field of forbiddenExposureFields) {
         assert.equal(
             Object.hasOwn(manifest.profiles.default, field),
             false,
             `default profile ${field} must be absent`,
+        );
+        assert.equal(
+            Object.hasOwn(manifest.profiles['local-test'], field),
+            false,
+            `local-test profile ${field} must be absent`,
         );
     }
 });

@@ -11,6 +11,11 @@ The agent uses `docker.io/assistos/cloudflared-agent:node24-cloudflared`. The im
 | `node /code/runtime/cloudflared-supervisor.mjs` | Main process; starts `cloudflared tunnel --no-autoupdate run` and writes redacted status. |
 | `sh /Agent/server/AgentServer.sh` | Sidecar; exposes admin MCP tools through the Ploinky router. |
 
+The production `default` profile requires `CLOUDFLARED_TUNNEL_TOKEN`. The
+`local-test` profile overrides `TUNNEL_TOKEN` with an empty optional value so
+the supervisor reports `missing-token` while the admin MCP sidecar and Explorer
+dashboard remain available for local UI checks.
+
 ## Required Secrets And Config
 
 Set secrets with `ploinky var`; do not commit token values.
@@ -24,6 +29,24 @@ Set secrets with `ploinky var`; do not commit token values.
 | `CLOUDFLARE_TUNNEL_ID` | for dashboard apply | Tunnel UUID. |
 | `CLOUDFLARE_BASE_DOMAIN` | recommended | Limits dashboard hostnames to one domain suffix. |
 | `CLOUDFLARED_ALLOWED_ORIGINS_JSON` | optional | JSON array of allowed `host.containers.internal:<port>` origins for published non-router HTTP services. |
+
+## Explorer Dashboard
+
+Explorer Settings discovers the admin-only `Cloudflare Tunnel` panel from
+`cloudflared/manifest.json` and
+`cloudflared/IDE-plugins/cloudflared-settings/`. The panel calls
+`/cloudflared/mcp` through the Ploinky router and uses the existing admin tools:
+
+| Tool | Dashboard use |
+| --- | --- |
+| `cloudflared_status` | Shows tunnel status, Cloudflare API readiness, allowed origins, and saved routes. |
+| `cloudflared_routes_validate` | Validates route drafts and previews generated ingress rules. |
+| `cloudflared_routes_apply` | Applies validated ingress rules and creates DNS records only when explicitly requested. |
+
+The dashboard never displays or accepts raw tunnel tokens. DNS record creation
+is unchecked by default; configure `CLOUDFLARE_ZONE_ID` and opt in before asking
+the dashboard to create CNAME records. Configure secrets with `ploinky var`
+before applying routes against Cloudflare.
 
 ## Ploinky Box Boundaries
 
@@ -52,6 +75,18 @@ Then enable and start the agent:
 ```bash
 ploinky enable agent basic/cloudflared global
 ```
+
+For a scratch local box that only needs the dashboard and admin MCP tools, use
+the local-test profile before enabling the agent:
+
+```bash
+ploinky profile local-test
+ploinky enable agent basic/cloudflared global
+ploinky profile default
+```
+
+That mode does not create a live Cloudflare edge tunnel. It is intended for
+checking Explorer settings and route validation wiring without a real token.
 
 The agent can also be enabled by another agent manifest as a non-blocking dependency:
 

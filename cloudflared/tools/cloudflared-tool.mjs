@@ -10,6 +10,7 @@ import {
 import {
   describeCloudflareConfig,
   putTunnelIngress,
+  requireCloudflareConfig,
   upsertDnsRecords,
 } from '../lib/cloudflare-api.mjs';
 
@@ -75,10 +76,12 @@ async function validate(input) {
 async function apply(input) {
   const { routes, origins } = normalizeRoutes(input.routes || []);
   const ingress = buildIngress(routes);
+  const createDnsRecords = input.createDnsRecords === true;
+  if (createDnsRecords) {
+    requireCloudflareConfig(process.env, { requireZone: true });
+  }
   const cloudflareResult = await putTunnelIngress(ingress);
-  const dns = input.createDnsRecords === false
-    ? []
-    : await upsertDnsRecords(routes);
+  const dns = createDnsRecords ? await upsertDnsRecords(routes) : [];
   const state = await writeRouteState(routes);
   return {
     ok: true,

@@ -3,7 +3,7 @@ id: DS003
 title: Cloudflared Tunnel Agent
 status: implemented
 owner: ploinky-team
-summary: Defines the Basic cloudflared connector agent that runs Cloudflare Tunnel inside Ploinky box without owning Ploinky routing or direct media/data-plane exposure.
+summary: Defines the Basic cloudflared connector agent, admin Explorer dashboard, and profile contract for running Cloudflare Tunnel inside Ploinky box without owning Ploinky routing or direct media/data-plane exposure.
 ---
 
 # DS003 Cloudflared Tunnel Agent
@@ -30,6 +30,12 @@ The tunnel credential must be supplied as the container environment variable
 Cloudflare API tokens, JWTs, `PLOINKY_MASTER_KEY`, Ploinky agent secrets, or
 other committed credentials.
 
+The production `default` profile must keep `TUNNEL_TOKEN` required. The
+`local-test` profile may override `TUNNEL_TOKEN` to an empty optional value so a
+fresh Ploinky box can start the admin MCP sidecar and Explorer dashboard without
+a real Cloudflare tunnel credential. In that mode the supervisor reports a
+redacted `missing-token` state and must not claim Cloudflare edge reachability.
+
 The agent must start `node /code/runtime/cloudflared-supervisor.mjs` as its
 long-lived process and must run the Ploinky AgentServer through
 `sh /Agent/server/AgentServer.sh`. Readiness is MCP-based so Ploinky can verify
@@ -38,8 +44,20 @@ the admin control plane while the supervisor owns the Cloudflare Tunnel process.
 The MCP policy must expose only admin-tagged tools for status, route validation,
 and route application. Tunnel configuration changes require
 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_TUNNEL_ID`.
-DNS record creation additionally requires `CLOUDFLARE_ZONE_ID`; operators may
-skip DNS creation and manage records separately.
+DNS record creation is opt-in and additionally requires
+`CLOUDFLARE_ZONE_ID`; operators may skip DNS creation and manage records
+separately. When DNS creation is requested, the tool must verify the required
+DNS configuration before mutating Cloudflare tunnel ingress so a missing zone
+does not leave remote ingress changed without local route-state persistence.
+
+The manifest must expose one admin-only Explorer settings entry with key
+`cloudflared-settings`, label `Cloudflare Tunnel`, plugin key
+`cloudflared/cloudflared-settings`, and settings component
+`cloudflared-settings`. The corresponding AchillesIDE plugin lives under
+`cloudflared/IDE-plugins/cloudflared-settings/` and owns the dashboard UI. The
+dashboard must call the router-mediated `/cloudflared/mcp` endpoint and must use
+the existing admin MCP tools rather than adding direct HTTP service exposure or
+Explorer-owned Cloudflare logic.
 
 The default Cloudflare published-application route for Ploinky box must target
 the Ploinky router from the connector container's point of view:
@@ -86,10 +104,30 @@ credential decisions. In Ploinky box, those direct surfaces remain operator
 choices expressed with `--publish` or convenience flags such as
 `--webmeet-ports` rather than hidden behavior in the cloudflared agent.
 
+### Question #4: Why does the repository include a local-test profile?
+
+Response: The Explorer dashboard and admin MCP tools need to be testable in a
+fresh local Ploinky box without depending on a real Cloudflare tunnel token.
+The `local-test` profile keeps the agent sidecar reachable and records a
+`missing-token` supervisor state, but it does not create a live edge tunnel or
+relax the production `default` profile's required token.
+
+### Question #5: Why does the dashboard plugin live in the cloudflared agent?
+
+Response: The dashboard is part of the `agent:basic/cloudflared` contract. It
+configures that agent's admin MCP tools and should be discoverable from the
+agent manifest together with the runtime profile and policy metadata. Keeping
+the AchillesIDE plugin beside the cloudflared agent avoids hard-coding
+cloudflared-specific files inside Explorer and lets Explorer's plugin discovery
+surface the dashboard whenever the Basic repository is installed. The plugin
+must provide assets at both the normalized component root and the raw
+settings-loader nested path used by Explorer's `rawRuntimePlugins` flow.
+
 ## Conclusion
 
 `agent:basic/cloudflared` is a narrow Cloudflare Tunnel connector for exposing
-Ploinky router-hosted HTTP and WebSocket surfaces from inside Ploinky box. It
-must keep secrets out of source files, avoid direct agent-port publication, and
-leave direct media or editor data-plane exposure to explicit Ploinky box
-`--publish` decisions.
+Ploinky router-hosted HTTP and WebSocket surfaces from inside Ploinky box. Its
+admin Explorer dashboard is plugin-owned by the agent and remains
+router-mediated through `/cloudflared/mcp`. The agent must keep secrets out of
+source files, avoid direct agent-port publication, and leave direct media or
+editor data-plane exposure to explicit Ploinky box `--publish` decisions.

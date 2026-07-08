@@ -26,7 +26,7 @@ export function describeCloudflareConfig(env = process.env) {
   };
 }
 
-function requireCloudflareConfig(env = process.env, { requireZone = false } = {}) {
+export function requireCloudflareConfig(env = process.env, { requireZone = false } = {}) {
   const config = getCloudflareConfig(env);
   const missing = [];
   if (!config.apiToken) missing.push('CLOUDFLARE_API_TOKEN');
