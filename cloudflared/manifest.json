@@ -1,0 +1,18 @@
+{
+  "container": "docker.io/cloudflare/cloudflared:latest",
+  "about": "Cloudflare Tunnel connector for exposing Ploinky router-hosted HTTP and WebSocket surfaces from inside Ploinky box.",
+  "start": "tunnel --no-autoupdate run",
+  "readiness": {
+    "protocol": "none"
+  },
+  "profiles": {
+    "default": {
+      "env": {
+        "TUNNEL_TOKEN": {
+          "varName": "CLOUDFLARED_TUNNEL_TOKEN",
+          "required": true
+        }
+      }
+    }
+  }
+}

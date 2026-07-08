@@ -18,6 +18,7 @@
             <nav class="nav" aria-label="Primary">
                 <a href="index.html">Overview</a>
                 <a href="bwrap-runner.html">bwrap-runner</a>
+                <a href="cloudflared.html">cloudflared</a>
                 <a href="specsLoader.html?spec=matrix.md">Specifications</a>
             </nav>
         </div>
@@ -79,6 +80,10 @@ flowchart LR
                             <td>Declares MCP tools when an agent exposes tool commands through AgentServer.</td>
                         </tr>
                         <tr>
+                            <td><code>cloudflared/manifest.json</code></td>
+                            <td>Runs Cloudflare Tunnel inside Ploinky box without publishing agent ports directly.</td>
+                        </tr>
+                        <tr>
                             <td><code>tests/unit/</code></td>
                             <td>Contains focused Node tests for agent-local policy and smoke behavior.</td>
                         </tr>
@@ -108,6 +113,27 @@ flowchart LR
                 The nested-bwrap smoke test skips cleanly when
                 <code>/usr/bin/bwrap</code> or nested user namespaces are
                 unavailable.
+            </p>
+        </section>
+
+        <section>
+            <h2>Tunnel Connector</h2>
+            <p>
+                <code>cloudflared</code> runs Cloudflare Tunnel as an outbound
+                connector from inside Ploinky box. Operators configure
+                Cloudflare public hostnames to target the Ploinky router at
+                <code>http://host.containers.internal:8080</code> from the
+                connector container's point of view. The connector does not
+                declare direct port publication, guest access, service routes,
+                or MCP exposure; direct data-plane ports such as LiveKit or
+                OnlyOffice remain explicit <code>--publish</code> or
+                <code>--webmeet-ports</code> decisions.
+            </p>
+            <p>
+                See <a href="cloudflared.html">cloudflared</a> for operator
+                guidance and
+                <a href="specsLoader.html?spec=DS003-cloudflared-agent.md">DS003</a>
+                for the connector contract.
             </p>
         </section>
 

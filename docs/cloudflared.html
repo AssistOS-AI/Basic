@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Basic Agent Catalog Documentation</title>
+    <link rel="stylesheet" href="styles.css">
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+    </script>
+    <script src="partials-loader.js" defer></script>
+</head>
+<body>
+    <header class="site-header">
+        <div class="site-header__inner">
+            <a class="brand" href="index.html">Basic Agent Catalog Documentation</a>
+            <nav class="nav" aria-label="Primary">
+                <a href="index.html">Overview</a>
+                <a href="bwrap-runner.html">bwrap-runner</a>
+                <a href="cloudflared.html">cloudflared</a>
+                <a href="specsLoader.html?spec=matrix.md">Specifications</a>
+            </nav>
+        </div>
+    </header>
+    <main>
+        <p class="breadcrumb"><a href="index.html">Overview</a> / cloudflared</p>
+        <h1>cloudflared</h1>
+        <p class="lead">
+            <code>cloudflared</code> is a Basic connector agent for running
+            Cloudflare Tunnel inside Ploinky box. It exposes router-hosted HTTP
+            and WebSocket surfaces through an outbound tunnel, while Ploinky's
+            router remains responsible for agent routing, authentication, MCP
+            proxying, and policy.
+        </p>
+
+        <section>
+            <h2>Runtime Shape</h2>
+            <p>
+                The agent uses the official
+                <code>docker.io/cloudflare/cloudflared:latest</code> image and
+                starts the image entrypoint with
+                <code>tunnel --no-autoupdate run</code>. The tunnel credential
+                is provided as <code>TUNNEL_TOKEN</code> inside the container
+                and is sourced from the workspace variable
+                <code>CLOUDFLARED_TUNNEL_TOKEN</code>. The manifest sets
+                <code>readiness.protocol</code> to <code>none</code> because
+                the connector does not provide an agent-local MCP or HTTP
+                readiness surface.
+            </p>
+            <pre class="mermaid">
+flowchart LR
+    Browser[External browser] --> Cloudflare[Cloudflare edge]
+    Cloudflare --> Tunnel[Cloudflare Tunnel]
+    Tunnel --> Connector[cloudflared container]
+    Connector --> Router[Ploinky router on host.containers.internal:8080]
+    Router --> Agent[Router-hosted agent surface]
+            </pre>
+        </section>
+
+        <section>
+            <h2>Route Configuration</h2>
+            <p>
+                Published application routes are configured in Cloudflare, not
+                in the Basic manifest. For the Ploinky router inside Ploinky
+                box, the Cloudflare service URL should be
+                <code>http://host.containers.internal:8080</code>. From inside
+                the connector container, <code>localhost</code> means the
+                connector itself, so <code>localhost:8080</code> is not the
+                router origin.
+            </p>
+            <p>
+                Operators should protect the public hostname with Cloudflare
+                Access unless the deployment is intentionally public. The Basic
+                manifest does not create Cloudflare DNS records, Access
+                applications, or hostname routes.
+            </p>
+        </section>
+
+        <section>
+            <h2>Exposure Boundary</h2>
+            <p>
+                The manifest deliberately does not declare
+                <code>routerAccess</code>, <code>httpServices</code>,
+                <code>guest</code>, <code>ssoProvider</code>,
+                <code>ports</code>, or <code>openPorts</code>. The connector
+                must not be used to tunnel random agent <code>7000</code>
+                ports, MCP endpoints, task-status endpoints, internal callback
+                ports, or storage surfaces directly. Those application surfaces
+                stay behind Ploinky's router.
+            </p>
+            <p>
+                Direct data planes such as LiveKit media, TURN, and OnlyOffice
+                editor ports remain explicit Ploinky box publication decisions.
+                Operators should expose those with command-line flags such as
+                <code>--publish</code> or <code>--webmeet-ports</code> when a
+                specific agent requires a direct port.
+            </p>
+            <p>
+                The normative contract for this connector is
+                <a href="specsLoader.html?spec=DS003-cloudflared-agent.md">DS003 Cloudflared Tunnel Agent</a>.
+            </p>
+        </section>
+    </main>
+    <div data-partial="partials/footer.html"></div>
+</body>
+</html>
