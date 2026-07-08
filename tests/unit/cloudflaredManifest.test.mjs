@@ -39,6 +39,20 @@ test('cloudflared manifest runs the custom Cloudflare Tunnel MCP agent image', (
     assert.equal(manifest.readiness?.protocol, 'mcp');
 });
 
+test('cloudflared start plus AgentServer sidecar prepares core MCP dependencies', () => {
+    const packagePath = path.join(repoRoot, 'cloudflared', 'package.json');
+
+    assert.equal(
+        fs.existsSync(packagePath),
+        true,
+        'cloudflared/package.json must exist so Ploinky prepares mcp-sdk for the AgentServer sidecar',
+    );
+
+    const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+    assert.equal(packageJson.private, true);
+    assert.equal(packageJson.type, 'module');
+});
+
 test('cloudflared manifest maps the required tunnel token from a workspace variable', () => {
     const manifest = readCloudflaredManifest();
     const tunnelToken = manifest.profiles?.default?.env?.TUNNEL_TOKEN;
