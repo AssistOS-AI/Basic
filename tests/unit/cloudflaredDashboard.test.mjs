@@ -71,6 +71,23 @@ test('parseCloudflaredToolPayload extracts JSON MCP text content', () => {
     });
 });
 
+test('parseCloudflaredToolPayload preserves MCP text errors', () => {
+    const parsed = parseCloudflaredToolPayload({
+        isError: true,
+        content: [
+            {
+                type: 'text',
+                text: 'MCP error -32603: Authentication error',
+            },
+        ],
+    });
+
+    assert.deepEqual(parsed, {
+        ok: false,
+        error: 'MCP error -32603: Authentication error',
+    });
+});
+
 test('raw Explorer settings resolution points at existing dashboard files', () => {
     const base = resolveSettingsComponentBase({
         agent: 'cloudflared',

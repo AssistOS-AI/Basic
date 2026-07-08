@@ -47,6 +47,9 @@ function extractToolText(result) {
     if (typeof result?.text === 'string') {
         return result.text;
     }
+    if (typeof result?.error?.message === 'string') {
+        return result.error.message;
+    }
     return '';
 }
 
@@ -496,6 +499,12 @@ export function parseCloudflaredToolPayload(payload) {
         const parsed = JSON.parse(rawText);
         return parsed && typeof parsed === 'object' ? parsed : {};
     } catch {
+        if (payload?.isError === true) {
+            return {
+                ok: false,
+                error: rawText,
+            };
+        }
         throw new Error('Invalid cloudflared tool payload.');
     }
 }
