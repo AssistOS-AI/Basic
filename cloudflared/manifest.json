@@ -1,16 +1,55 @@
 {
-  "container": "docker.io/cloudflare/cloudflared:latest",
-  "about": "Cloudflare Tunnel connector for exposing Ploinky router-hosted HTTP and WebSocket surfaces from inside Ploinky box.",
-  "start": "tunnel --no-autoupdate run",
+  "container": "docker.io/assistos/cloudflared-agent:node24-cloudflared",
+  "about": "Cloudflare Tunnel connector and admin control plane for exposing selected Ploinky box HTTP and WebSocket surfaces through Cloudflare Tunnel.",
+  "start": "node /code/runtime/cloudflared-supervisor.mjs",
+  "agent": "sh /Agent/server/AgentServer.sh",
   "readiness": {
-    "protocol": "none"
+    "protocol": "mcp"
+  },
+  "endpoints": {
+    "agent-card": {
+      "name": "Cloudflare Tunnel",
+      "description": "Runs cloudflared inside ploinky-box and exposes admin-only tunnel route management tools.",
+      "tags": [
+        "cloudflare",
+        "tunnel",
+        "admin"
+      ]
+    }
   },
   "profiles": {
     "default": {
+      "mounts": {
+        "code": "ro"
+      },
       "env": {
         "TUNNEL_TOKEN": {
           "varName": "CLOUDFLARED_TUNNEL_TOKEN",
           "required": true
+        },
+        "CLOUDFLARE_API_TOKEN": {
+          "required": false
+        },
+        "CLOUDFLARE_ACCOUNT_ID": {
+          "required": false
+        },
+        "CLOUDFLARE_ZONE_ID": {
+          "required": false
+        },
+        "CLOUDFLARE_TUNNEL_ID": {
+          "required": false
+        },
+        "CLOUDFLARE_BASE_DOMAIN": {
+          "required": false
+        },
+        "CLOUDFLARED_ALLOWED_ORIGINS_JSON": {
+          "required": false
+        },
+        "CLOUDFLARED_STATE_FILE": {
+          "default": "/root/cloudflared/routes.json"
+        },
+        "CLOUDFLARED_STATUS_FILE": {
+          "default": "/root/cloudflared/status.json"
         }
       }
     }

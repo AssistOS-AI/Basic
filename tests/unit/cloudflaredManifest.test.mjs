@@ -29,15 +29,14 @@ function readCloudflaredManifest() {
     return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 }
 
-test('cloudflared manifest runs the official Cloudflare Tunnel connector', () => {
+test('cloudflared manifest runs the custom Cloudflare Tunnel MCP agent image', () => {
     const manifest = readCloudflaredManifest();
 
-    assert.equal(manifest.container, 'docker.io/cloudflare/cloudflared:latest');
-    assert.match(manifest.about, /Cloudflare Tunnel/);
-    assert.match(manifest.about, /Ploinky router-hosted HTTP and WebSocket/);
-    assert.match(manifest.about, /Ploinky box/);
-    assert.equal(manifest.start, 'tunnel --no-autoupdate run');
-    assert.equal(manifest.readiness?.protocol, 'none');
+    assert.equal(manifest.container, 'docker.io/assistos/cloudflared-agent:node24-cloudflared');
+    assert.match(manifest.about, /Cloudflare Tunnel connector and admin control plane/);
+    assert.equal(manifest.start, 'node /code/runtime/cloudflared-supervisor.mjs');
+    assert.equal(manifest.agent, 'sh /Agent/server/AgentServer.sh');
+    assert.equal(manifest.readiness?.protocol, 'mcp');
 });
 
 test('cloudflared manifest maps the required tunnel token from a workspace variable', () => {
@@ -78,7 +77,7 @@ test('cloudflared manifest keeps the documented about string stable', () => {
 
     assert.equal(
         manifest.about,
-        'Cloudflare Tunnel connector for exposing Ploinky router-hosted HTTP and WebSocket surfaces from inside Ploinky box.',
+        'Cloudflare Tunnel connector and admin control plane for exposing selected Ploinky box HTTP and WebSocket surfaces through Cloudflare Tunnel.',
     );
 });
 
@@ -101,7 +100,7 @@ test('cloudflared manifest does not contain raw tunnel, API, JWT, or master-key 
     const rawSecretPatterns = [
         /eyJ[A-Za-z0-9_-]+?\.[A-Za-z0-9_-]+?\.[A-Za-z0-9_-]+/,
         /\b[a-f0-9]{64}\b/i,
-        /\b(?:cf|cloudflare)[_-]?api[_-]?token\b/i,
+        /\b(?:cf|cloudflare)[_-]?api[_-]?token\s*[:=]\s*["']?[A-Za-z0-9_-]{20,}/i,
         /\bPLOINKY_MASTER_KEY\b/,
         /\bCLOUDFLARED_TUNNEL_TOKEN\s*[:=]\s*["']?[A-Za-z0-9_-]{20,}/,
     ];
@@ -112,5 +111,51 @@ test('cloudflared manifest does not contain raw tunnel, API, JWT, or master-key 
             false,
             `manifest must not match raw secret pattern ${pattern}`,
         );
+    }
+});
+
+test('cloudflared MCP tools are admin-only and use strict input schemas', () => {
+    const mcpConfigPath = path.join(repoRoot, 'cloudflared', 'mcp-config.json');
+
+    assert.equal(fs.existsSync(mcpConfigPath), true, 'cloudflared/mcp-config.json must exist');
+
+    const mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf8'));
+    const tools = mcpConfig.tools || [];
+
+    assert.deepEqual(
+        tools.map((tool) => tool.name),
+        [
+            'cloudflared_status',
+            'cloudflared_routes_validate',
+            'cloudflared_routes_apply',
+        ],
+    );
+
+    for (const tool of tools) {
+        assert.deepEqual(tool.tags, ['admin'], `${tool.name} must be admin-only`);
+        assert.equal(tool.command, 'node');
+        assert.deepEqual(tool.args, ['tools/cloudflared-tool.mjs']);
+        assert.equal(tool.cwd, '/code');
+        assert.equal(
+            Object.hasOwn(tool.inputSchema || {}, 'type'),
+            false,
+            `${tool.name} must use Ploinky AgentServer shorthand inputSchema, not a JSON Schema root`,
+        );
+    }
+
+    for (const tool of tools.filter((entry) => entry.name !== 'cloudflared_status')) {
+        const routeSchema = tool.inputSchema.routes?.items;
+        assert.equal(tool.inputSchema.routes?.type, 'array');
+        assert.equal(routeSchema?.type, 'object');
+        assert.equal(
+            routeSchema?.additionalProperties,
+            false,
+            `${tool.name} route entries must reject unknown fields`,
+        );
+        assert.notEqual(tool.inputSchema.routes?.optional, true);
+        assert.notEqual(routeSchema.properties?.hostname?.optional, true);
+        assert.notEqual(routeSchema.properties?.originId?.optional, true);
+        assert.equal(routeSchema.properties?.id?.optional, true);
+        assert.equal(routeSchema.properties?.path?.optional, true);
     }
 });

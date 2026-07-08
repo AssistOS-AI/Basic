@@ -18,10 +18,11 @@ reachable from inside the `cloudflared` container.
 
 ## Core Content
 
-The manifest must use the official Cloudflare image
-`docker.io/cloudflare/cloudflared:latest`. Ploinky starts that image with the
-custom command `tunnel --no-autoupdate run`, which relies on the image entrypoint
-to execute `cloudflared tunnel --no-autoupdate run`.
+The manifest must use the custom Ploinky-compatible image
+`docker.io/assistos/cloudflared-agent:node24-cloudflared`. That image embeds
+the Cloudflare `cloudflared` binary into the Node-based Ploinky agent runtime so
+the connector can run both a tunnel supervisor and an admin-only MCP control
+plane.
 
 The tunnel credential must be supplied as the container environment variable
 `TUNNEL_TOKEN`, sourced from the workspace variable
@@ -29,10 +30,16 @@ The tunnel credential must be supplied as the container environment variable
 Cloudflare API tokens, JWTs, `PLOINKY_MASTER_KEY`, Ploinky agent secrets, or
 other committed credentials.
 
-The manifest readiness protocol must be `none`. `cloudflared` does not expose a
-stable in-container application readiness port for this catalog contract, and
-tunnel connection failures should be diagnosed from process exit state and
-container logs rather than by routing Ploinky MCP readiness traffic to it.
+The agent must start `node /code/runtime/cloudflared-supervisor.mjs` as its
+long-lived process and must run the Ploinky AgentServer through
+`sh /Agent/server/AgentServer.sh`. Readiness is MCP-based so Ploinky can verify
+the admin control plane while the supervisor owns the Cloudflare Tunnel process.
+
+The MCP policy must expose only admin-tagged tools for status, route validation,
+and route application. Tunnel configuration changes require
+`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_TUNNEL_ID`.
+DNS record creation additionally requires `CLOUDFLARE_ZONE_ID`; operators may
+skip DNS creation and manage records separately.
 
 The default Cloudflare published-application route for Ploinky box must target
 the Ploinky router from the connector container's point of view:
@@ -42,9 +49,9 @@ as `localhost:8080`, because `localhost` inside the connector means the
 
 The `cloudflared` agent must not declare `routerAccess`, `httpServices`,
 `guest`, `ssoProvider`, `ports`, or `openPorts`. It does not own Ploinky
-routing, authentication, MCP policy, guest access, HTTP service publication, or
-direct port publication. It is an outbound connector for router-hosted HTTP and
-WebSocket traffic.
+routing, authentication, guest access, HTTP service publication, or direct port
+publication. It is an outbound connector plus admin control plane for
+router-hosted HTTP and WebSocket traffic.
 
 This catalog contract does not define a general TCP or UDP exposure mechanism.
 Direct media or data-plane surfaces such as LiveKit media, TURN, and OnlyOffice
@@ -64,13 +71,12 @@ agent ports would bypass that boundary. The connector therefore documents the
 router target `http://host.containers.internal:8080` as the supported HTTP and
 WebSocket origin for Cloudflare published applications.
 
-### Question #2: Why is readiness set to `none`?
+### Question #2: Why is readiness MCP-based?
 
-Response: A Cloudflare Tunnel connector is useful only after it authenticates to
-Cloudflare and establishes outbound connections, but this catalog agent does
-not provide an agent-local HTTP readiness service for Ploinky to probe. Marking
-readiness as `none` avoids implying that MCP or TCP readiness checks describe
-the tunnel's public availability.
+Response: The tunnel process itself is an outbound connector whose public
+availability depends on Cloudflare, but the Ploinky agent also exposes
+admin-only MCP tools for route validation and application. MCP readiness proves
+that control plane is available without claiming Cloudflare edge reachability.
 
 ### Question #3: Why are LiveKit and OnlyOffice excluded from this tunnel contract?
 

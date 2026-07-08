@@ -1,0 +1,134 @@
+{
+  "tools": [
+    {
+      "name": "cloudflared_status",
+      "title": "Cloudflared status",
+      "description": "Return redacted tunnel process, environment, and saved route status.",
+      "command": "node",
+      "args": [
+        "tools/cloudflared-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 30000,
+      "env": {
+        "TOOL_NAME": "cloudflared_status"
+      },
+      "inputSchema": {},
+      "tags": [
+        "admin"
+      ]
+    },
+    {
+      "name": "cloudflared_routes_validate",
+      "title": "Validate Cloudflare tunnel routes",
+      "description": "Validate requested tunnel routes and return the Cloudflare ingress preview without mutating Cloudflare or local state.",
+      "command": "node",
+      "args": [
+        "tools/cloudflared-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 30000,
+      "env": {
+        "TOOL_NAME": "cloudflared_routes_validate"
+      },
+      "inputSchema": {
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "optional": true
+              },
+              "enabled": {
+                "type": "boolean",
+                "optional": true
+              },
+              "hostname": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string",
+                "optional": true
+              },
+              "originId": {
+                "type": "string"
+              },
+              "service": {
+                "type": "string",
+                "optional": true
+              },
+              "description": {
+                "type": "string",
+                "optional": true
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "tags": [
+        "admin"
+      ]
+    },
+    {
+      "name": "cloudflared_routes_apply",
+      "title": "Apply Cloudflare tunnel routes",
+      "description": "Validate, persist, and apply tunnel routes to the configured Cloudflare tunnel, optionally creating CNAME DNS records.",
+      "command": "node",
+      "args": [
+        "tools/cloudflared-tool.mjs"
+      ],
+      "cwd": "/code",
+      "timeoutMs": 60000,
+      "env": {
+        "TOOL_NAME": "cloudflared_routes_apply"
+      },
+      "inputSchema": {
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "optional": true
+              },
+              "enabled": {
+                "type": "boolean",
+                "optional": true
+              },
+              "hostname": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string",
+                "optional": true
+              },
+              "originId": {
+                "type": "string"
+              },
+              "service": {
+                "type": "string",
+                "optional": true
+              },
+              "description": {
+                "type": "string",
+                "optional": true
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "createDnsRecords": {
+          "type": "boolean",
+          "optional": true
+        }
+      },
+      "tags": [
+        "admin"
+      ]
+    }
+  ]
+}
