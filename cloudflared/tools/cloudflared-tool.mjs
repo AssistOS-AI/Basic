@@ -9,6 +9,7 @@ import {
 } from '../lib/routes.mjs';
 import {
   describeCloudflareConfig,
+  preflightDnsRecordAccess,
   putTunnelIngress,
   requireCloudflareConfig,
   upsertDnsRecords,
@@ -79,6 +80,7 @@ async function apply(input) {
   const createDnsRecords = input.createDnsRecords === true;
   if (createDnsRecords) {
     requireCloudflareConfig(process.env, { requireZone: true });
+    await preflightDnsRecordAccess(routes);
   }
   const cloudflareResult = await putTunnelIngress(ingress);
   const dns = createDnsRecords ? await upsertDnsRecords(routes) : [];

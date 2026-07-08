@@ -72,6 +72,20 @@ export async function putTunnelIngress(ingress, { env = process.env } = {}) {
   );
 }
 
+export async function preflightDnsRecordAccess(routes, { env = process.env } = {}) {
+  const config = requireCloudflareConfig(env, { requireZone: true });
+  const enabledHostnames = Array.from(new Set(routes.filter((route) => route.enabled).map((route) => route.hostname)));
+  for (const hostname of enabledHostnames) {
+    const query = new URLSearchParams({ type: 'CNAME', name: hostname });
+    await requestCloudflare(
+      config,
+      'GET',
+      `/zones/${encodeURIComponent(config.zoneId)}/dns_records?${query.toString()}`,
+    );
+  }
+  return { ok: true, hostnames: enabledHostnames };
+}
+
 export async function upsertDnsRecords(routes, { env = process.env } = {}) {
   const config = requireCloudflareConfig(env, { requireZone: true });
   const enabledHostnames = Array.from(new Set(routes.filter((route) => route.enabled).map((route) => route.hostname)));
