@@ -19,6 +19,7 @@
                 <a href="index.html">Overview</a>
                 <a href="bwrap-runner.html">bwrap-runner</a>
                 <a href="cloudflared.html">cloudflared</a>
+                <a href="web-publishing.html">web-publishing</a>
                 <a href="specsLoader.html?spec=matrix.md">Specifications</a>
             </nav>
         </div>
@@ -84,6 +85,10 @@ flowchart LR
                             <td>Runs Cloudflare Tunnel inside Ploinky box without publishing agent ports directly.</td>
                         </tr>
                         <tr>
+                            <td><code>web-publishing/manifest.json</code></td>
+                            <td>Owns Explorer public topology, nginx data-plane routing, optional Cloudflare Tunnel operation, and startup config-provider outputs.</td>
+                        </tr>
+                        <tr>
                             <td><code>tests/unit/</code></td>
                             <td>Contains focused Node tests for agent-local policy and smoke behavior.</td>
                         </tr>
@@ -134,6 +139,24 @@ flowchart LR
                 guidance and
                 <a href="specsLoader.html?spec=DS003-cloudflared-agent.md">DS003</a>
                 for the connector contract.
+            </p>
+        </section>
+
+        <section>
+            <h2>Web Publishing</h2>
+            <p>
+                <code>web-publishing</code> is the Explorer-facing public
+                topology owner for QA and production. It generates startup
+                config values for dependent agents, renders nginx route config,
+                supervises optional Cloudflare Tunnel operation, and exposes
+                its dashboard only through Explorer admin settings and admin
+                MCP tools.
+            </p>
+            <p>
+                See <a href="web-publishing.html">web-publishing</a> for
+                operator guidance and
+                <a href="specsLoader.html?spec=DS004-web-publishing-agent.md">DS004</a>
+                for the agent contract.
             </p>
         </section>
 

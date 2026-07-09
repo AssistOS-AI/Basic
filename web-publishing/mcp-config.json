@@ -1,0 +1,94 @@
+{
+  "tools": [
+    {
+      "name": "web_publishing_status",
+      "title": "Web Publishing status",
+      "description": "Return redacted nginx, cloudflared, route, and provider status.",
+      "command": "node",
+      "args": ["tools/web-publishing-tool.mjs"],
+      "cwd": "/code",
+      "timeoutMs": 30000,
+      "env": { "TOOL_NAME": "web_publishing_status" },
+      "inputSchema": {
+        "additionalProperties": false
+      },
+      "tags": ["admin"]
+    },
+    {
+      "name": "web_publishing_config_get",
+      "title": "Get Web Publishing config",
+      "description": "Return the saved Web Publishing config with secret fields represented by presence flags.",
+      "command": "node",
+      "args": ["tools/web-publishing-tool.mjs"],
+      "cwd": "/code",
+      "timeoutMs": 30000,
+      "env": { "TOOL_NAME": "web_publishing_config_get" },
+      "inputSchema": {
+        "additionalProperties": false
+      },
+      "tags": ["admin"]
+    },
+    {
+      "name": "web_publishing_config_validate",
+      "title": "Validate Web Publishing config",
+      "description": "Validate a draft Web Publishing route model without mutating local or Cloudflare state.",
+      "command": "node",
+      "args": ["tools/web-publishing-tool.mjs"],
+      "cwd": "/code",
+      "timeoutMs": 30000,
+      "env": { "TOOL_NAME": "web_publishing_config_validate" },
+      "inputSchema": {
+        "config": { "type": "object", "optional": true },
+        "additionalProperties": false
+      },
+      "tags": ["admin"]
+    },
+    {
+      "name": "web_publishing_config_apply",
+      "title": "Apply Web Publishing config",
+      "description": "Validate and persist Web Publishing route/config state for provider preflight and supervisor reload.",
+      "command": "node",
+      "args": ["tools/web-publishing-tool.mjs"],
+      "cwd": "/code",
+      "timeoutMs": 60000,
+      "env": { "TOOL_NAME": "web_publishing_config_apply" },
+      "inputSchema": {
+        "config": { "type": "object" },
+        "additionalProperties": false
+      },
+      "tags": ["admin"]
+    },
+    {
+      "name": "web_publishing_cloudflare_tunnel_plan",
+      "title": "Plan Cloudflare tunnel changes",
+      "description": "Return redacted Cloudflare tunnel and DNS changes for the current or draft route model.",
+      "command": "node",
+      "args": ["tools/web-publishing-tool.mjs"],
+      "cwd": "/code",
+      "timeoutMs": 30000,
+      "env": { "TOOL_NAME": "web_publishing_cloudflare_tunnel_plan" },
+      "inputSchema": {
+        "config": { "type": "object", "optional": true },
+        "createDnsRecords": { "type": "boolean", "optional": true },
+        "additionalProperties": false
+      },
+      "tags": ["admin"]
+    },
+    {
+      "name": "web_publishing_cloudflare_tunnel_apply",
+      "title": "Apply Cloudflare tunnel changes",
+      "description": "Create or update Cloudflare tunnel ingress, with DNS record mutation only when explicitly requested.",
+      "command": "node",
+      "args": ["tools/web-publishing-tool.mjs"],
+      "cwd": "/code",
+      "timeoutMs": 90000,
+      "env": { "TOOL_NAME": "web_publishing_cloudflare_tunnel_apply" },
+      "inputSchema": {
+        "config": { "type": "object", "optional": true },
+        "createDnsRecords": { "type": "boolean", "optional": true },
+        "additionalProperties": false
+      },
+      "tags": ["admin"]
+    }
+  ]
+}

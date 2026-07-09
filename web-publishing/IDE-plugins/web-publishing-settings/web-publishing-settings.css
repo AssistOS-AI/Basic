@@ -1,0 +1,59 @@
+.web-publishing-settings {
+    display: grid;
+    gap: 12px;
+}
+
+.web-publishing-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.web-publishing-toolbar input,
+.web-publishing-toolbar select,
+.web-publishing-toolbar button {
+    min-height: 32px;
+}
+
+.web-publishing-check {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.web-publishing-status {
+    min-height: 28px;
+    padding: 6px 8px;
+    border: 1px solid rgba(120, 120, 120, 0.35);
+    border-radius: 6px;
+}
+
+.web-publishing-state {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 6px;
+    font-size: 13px;
+}
+
+.web-publishing-state span {
+    padding: 6px 8px;
+    border: 1px solid rgba(120, 120, 120, 0.25);
+    border-radius: 6px;
+}
+
+.web-publishing-state strong {
+    font-weight: 600;
+}
+
+.web-publishing-routes {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.web-publishing-routes th,
+.web-publishing-routes td {
+    padding: 6px;
+    border-bottom: 1px solid rgba(120, 120, 120, 0.25);
+    text-align: left;
+}

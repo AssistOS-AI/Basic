@@ -1,0 +1,6 @@
+{
+  "name": "web-publishing-settings",
+  "label": "Web Publishing",
+  "component": "web-publishing-settings",
+  "version": "1.0.0"
+}

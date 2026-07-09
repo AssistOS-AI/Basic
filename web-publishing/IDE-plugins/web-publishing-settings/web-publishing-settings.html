@@ -1,0 +1,37 @@
+<section class="web-publishing-settings">
+    <div class="web-publishing-toolbar">
+        <select id="webPublishingMode" aria-label="Mode">
+            <option value="nginx">nginx</option>
+            <option value="cloudflare-token">cloudflare-token</option>
+            <option value="cloudflare-api">cloudflare-api</option>
+            <option value="nginx-cloudflare">nginx-cloudflare</option>
+        </select>
+        <input id="webPublishingBaseDomain" type="text" autocomplete="off" placeholder="example.com">
+        <label class="web-publishing-check">
+            <input id="webPublishingCreateDns" type="checkbox">
+            <span>Create DNS</span>
+        </label>
+        <button id="webPublishingRefresh" type="button">Refresh</button>
+        <button id="webPublishingValidate" type="button">Validate</button>
+        <button id="webPublishingApply" type="button">Apply</button>
+    </div>
+    <div id="webPublishingStatus" class="web-publishing-status" aria-live="polite"></div>
+    <div class="web-publishing-state" aria-live="polite">
+        <span>API token <strong id="webPublishingApiTokenState">unknown</strong></span>
+        <span>Account <strong id="webPublishingAccountState">unknown</strong></span>
+        <span>DNS zone <strong id="webPublishingZoneState">unknown</strong></span>
+        <span>Tunnel token <strong id="webPublishingTunnelTokenState">unknown</strong></span>
+    </div>
+    <table class="web-publishing-routes">
+        <thead>
+            <tr>
+                <th>Enabled</th>
+                <th>Host</th>
+                <th>Path</th>
+                <th>Origin</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody id="webPublishingRoutes"></tbody>
+    </table>
+</section>

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Web Publishing - Basic Agent Catalog Documentation</title>
+    <link rel="stylesheet" href="styles.css">
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+    </script>
+    <script src="partials-loader.js" defer></script>
+</head>
+<body>
+    <header class="site-header">
+        <div class="site-header__inner">
+            <a class="brand" href="index.html">Basic Agent Catalog Documentation</a>
+            <nav class="nav" aria-label="Primary">
+                <a href="index.html">Overview</a>
+                <a href="bwrap-runner.html">bwrap-runner</a>
+                <a href="cloudflared.html">cloudflared</a>
+                <a href="web-publishing.html">web-publishing</a>
+                <a href="specsLoader.html?spec=matrix.md">Specifications</a>
+            </nav>
+        </div>
+    </header>
+    <main>
+        <p class="breadcrumb"><a href="index.html">Overview</a> / web-publishing</p>
+        <h1>web-publishing</h1>
+        <p class="lead">
+            <code>web-publishing</code> is the Basic agent that owns Explorer
+            public topology for QA and production. It generates startup config
+            for dependent agents, renders nginx routes, optionally supervises
+            Cloudflare Tunnel, and exposes configuration only through admin
+            settings and admin MCP tools.
+        </p>
+
+        <section>
+            <h2>Runtime Shape</h2>
+            <p>
+                The agent uses
+                <code>docker.io/assistos/web-publishing-agent:node24-nginx-cloudflared</code>.
+                The container runs <code>node /code/runtime/supervisor.mjs</code>
+                and the bundled Ploinky AgentServer sidecar. The default profile
+                publishes nginx only on <code>127.0.0.1:8081</code>; the
+                separate <code>lan</code> profile is the explicit reviewed path
+                for binding that data-plane port to all interfaces.
+            </p>
+            <pre class="mermaid">
+flowchart LR
+    Provider[Startup config provider] --> Secrets[Ploinky encrypted workspace vars]
+    Secrets --> OnlyOffice[OnlyOffice manifest env]
+    Secrets --> WebMeet[WebMeet manifest env]
+    Admin[Explorer admin settings] --> MCP[/web-publishing/mcp/]
+    MCP --> Tools[Admin publishing tools]
+    Tools --> State[Agent config and status]
+    Supervisor[Supervisor] --> Nginx[nginx data plane]
+    Supervisor --> Tunnel[optional cloudflared]
+            </pre>
+        </section>
+
+        <section>
+            <h2>Provider Outputs</h2>
+            <p>
+                Web Publishing emits public topology values through Ploinky's
+                startup config-provider contract before dependent agents resolve
+                their environment. Outputs include OnlyOffice public/callback
+                URLs and WebMeet public signaling/TURN host values. The scoped
+                tunnel token variable is
+                <code>WEB_PUBLISHING_CLOUDFLARED_TUNNEL_TOKEN</code> and is
+                treated as sensitive.
+            </p>
+            <p>
+                Generated or shared-generated service secrets stay with their
+                owning agents. Web Publishing must not output
+                <code>WEBMEET_LIVEKIT_API_KEY</code>,
+                <code>WEBMEET_LIVEKIT_API_SECRET</code>,
+                <code>WEBMEET_TURN_PASSWORD</code>,
+                <code>PLOINKY_WEBMEET_MASTER_KEY</code>,
+                <code>ONLYOFFICE_JWT_SECRET</code>, or
+                <code>JWT_SECRET</code>.
+            </p>
+            <p>
+                Operator-facing inputs use Web Publishing-scoped names such as
+                <code>WEB_PUBLISHING_BASE_DOMAIN</code>,
+                <code>WEB_PUBLISHING_PUBLIC_URL</code>, and
+                <code>WEB_PUBLISHING_CERT_EMAIL</code>. Public topology names
+                like <code>WEBMEET_CERT_EMAIL</code> are generated outputs.
+            </p>
+        </section>
+
+        <section>
+            <h2>Cloudflare Modes</h2>
+            <p>
+                In token mode, the supervisor starts
+                <code>cloudflared tunnel --no-autoupdate run --token &lt;token&gt;</code>
+                when the scoped token is configured. In API mode, admin MCP
+                tools can plan and apply remote tunnel ingress using Cloudflare
+                account credentials. DNS record changes are never automatic:
+                the admin must opt in and provide a zone id.
+            </p>
+            <p>
+                API-created tunnel tokens are kept out of MCP responses and
+                status files. The agent stores the token in its private
+                secret-state file and the startup provider hands it to Ploinky
+                as the sensitive scoped tunnel-token output.
+            </p>
+            <p>
+                Cloudflare HTTP tunnels can carry HTTP and WebSocket signaling.
+                LiveKit and TURN media still require explicit media-plane
+                publication in the WebMeet infra agent.
+            </p>
+        </section>
+
+        <section>
+            <h2>Explorer Cutover Boundary</h2>
+            <p>
+                Explorer QA and production profiles should enable
+                <code>basic/web-publishing global</code> and list it as a
+                startup config provider. They should not keep the old
+                <code>basic/cloudflared</code> dependency as a fallback for
+                public topology.
+            </p>
+            <p>
+                The normative contract is
+                <a href="specsLoader.html?spec=DS004-web-publishing-agent.md">DS004 Web Publishing Agent</a>.
+            </p>
+        </section>
+    </main>
+    <div data-partial="partials/footer.html"></div>
+</body>
+</html>

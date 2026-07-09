@@ -1,0 +1,126 @@
+{
+  "container": "docker.io/assistos/web-publishing-agent:node24-nginx-cloudflared",
+  "about": "Web Publishing owns Explorer public topology, nginx route rendering, optional Cloudflare Tunnel operation, and an admin settings surface without exposing a public dashboard route.",
+  "start": "node /code/runtime/supervisor.mjs",
+  "agent": "sh /Agent/server/AgentServer.sh",
+  "readiness": {
+    "protocol": "mcp"
+  },
+  "containerSecurity": {
+    "privileged": false
+  },
+  "endpoints": {
+    "agent-card": {
+      "name": "Web Publishing",
+      "description": "Generates Explorer public topology, supervises nginx and optional cloudflared, and exposes admin-only publishing tools.",
+      "tags": [
+        "publishing",
+        "nginx",
+        "cloudflare",
+        "admin"
+      ]
+    }
+  },
+  "ideSettings": [
+    {
+      "key": "web-publishing-settings",
+      "label": "Web Publishing",
+      "scope": "workspace",
+      "pluginKey": "web-publishing/web-publishing-settings",
+      "settingsComponent": "web-publishing-settings",
+      "adminOnly": true
+    }
+  ],
+  "providesConfig": {
+    "command": "node runtime/provider.mjs",
+    "outputs": [
+      { "name": "ONLYOFFICE_PUBLIC_URL", "sensitive": false },
+      { "name": "ONLYOFFICE_INTERNAL_URL", "sensitive": false },
+      { "name": "ONLYOFFICE_CALLBACK_BASE_URL", "sensitive": false },
+      { "name": "WEBMEET_PUBLIC_LIVEKIT_URL", "sensitive": false },
+      { "name": "WEBMEET_LIVEKIT_URL", "sensitive": false },
+      { "name": "WEBMEET_TLS_HOSTNAME", "sensitive": false },
+      { "name": "WEBMEET_TURN_HOST", "sensitive": false },
+      { "name": "WEBMEET_TURN_EXTERNAL_IP", "sensitive": false },
+      { "name": "WEBMEET_TURN_REALM", "sensitive": false },
+      { "name": "WEBMEET_CERT_EMAIL", "sensitive": false },
+      { "name": "WEBMEET_LIVEKIT_UPSTREAM", "sensitive": false },
+      { "name": "WEB_PUBLISHING_CLOUDFLARED_TUNNEL_TOKEN", "sensitive": true },
+      { "name": "WEB_PUBLISHING_CLOUDFLARE_TUNNEL_ID", "sensitive": false },
+      { "name": "WEB_PUBLISHING_CLOUDFLARE_TUNNEL_NAME", "sensitive": false }
+    ]
+  },
+  "profiles": {
+    "default": {
+      "mounts": {
+        "code": "ro"
+      },
+      "openPorts": [
+        "127.0.0.1:8081:8081"
+      ],
+      "volumes": {
+        ".ploinky/data/web-publishing": "/data"
+      },
+      "env": {
+        "WEB_PUBLISHING_MODE": {
+          "required": false,
+          "default": "nginx"
+        },
+        "WEB_PUBLISHING_BASE_DOMAIN": {
+          "required": false
+        },
+        "WEB_PUBLISHING_PUBLIC_URL": {
+          "required": false
+        },
+        "WEB_PUBLISHING_PUBLIC_HOST": {
+          "required": false
+        },
+        "WEB_PUBLISHING_CLOUDFLARE_API_TOKEN": {
+          "required": false
+        },
+        "WEB_PUBLISHING_CLOUDFLARE_ACCOUNT_ID": {
+          "required": false
+        },
+        "WEB_PUBLISHING_CLOUDFLARE_ZONE_ID": {
+          "required": false
+        },
+        "WEB_PUBLISHING_CLOUDFLARE_TUNNEL_ID": {
+          "required": false
+        },
+        "WEB_PUBLISHING_CLOUDFLARE_TUNNEL_NAME": {
+          "required": false
+        },
+        "TUNNEL_TOKEN": {
+          "varName": "WEB_PUBLISHING_CLOUDFLARED_TUNNEL_TOKEN",
+          "required": false
+        },
+        "WEB_PUBLISHING_CERT_EMAIL": {
+          "required": false
+        },
+        "WEB_PUBLISHING_CONFIG_FILE": {
+          "default": "/data/config.json"
+        },
+        "WEB_PUBLISHING_STATUS_FILE": {
+          "default": "/data/status.json"
+        },
+        "WEB_PUBLISHING_SECRET_STATE_FILE": {
+          "default": "/data/secret-state.json"
+        },
+        "WEB_PUBLISHING_NGINX_CONFIG_FILE": {
+          "default": "/tmp/web-publishing-nginx.conf"
+        }
+      }
+    },
+    "lan": {
+      "openPorts": [
+        "0.0.0.0:8081:8081"
+      ],
+      "env": {
+        "WEB_PUBLISHING_MODE": {
+          "required": false,
+          "default": "nginx"
+        }
+      }
+    }
+  }
+}
