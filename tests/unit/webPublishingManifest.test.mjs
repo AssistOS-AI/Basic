@@ -45,7 +45,7 @@ test('web-publishing manifest declares the custom nginx and cloudflared image', 
     assert.equal(manifest.container, 'docker.io/assistos/web-publishing-agent:node24-nginx-cloudflared');
     assert.equal(manifest.start, 'node /code/runtime/supervisor.mjs');
     assert.equal(manifest.agent, 'sh /Agent/server/AgentServer.sh');
-    assert.equal(manifest.readiness?.protocol, 'mcp');
+    assert.equal(manifest.readiness?.protocol, 'tcp');
     assert.equal(manifest.containerSecurity?.privileged, false);
 });
 

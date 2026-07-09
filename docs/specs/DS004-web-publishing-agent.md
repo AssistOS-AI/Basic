@@ -14,7 +14,7 @@ The `web-publishing` agent is the Basic catalog agent that owns Explorer QA and 
 
 ## Core Content
 
-The manifest must use the custom image `docker.io/assistos/web-publishing-agent:node24-nginx-cloudflared`. That image supplies the Ploinky Node runtime, nginx, and the Cloudflare `cloudflared` binary. The long-lived process is `node /code/runtime/supervisor.mjs`; the Ploinky AgentServer sidecar runs through `sh /Agent/server/AgentServer.sh`; readiness is MCP-based.
+The manifest must use the custom image `docker.io/assistos/web-publishing-agent:node24-nginx-cloudflared`. That image supplies the Ploinky Node runtime, nginx, and the Cloudflare `cloudflared` binary. The long-lived process is `node /code/runtime/supervisor.mjs`; the Ploinky AgentServer sidecar runs through `sh /Agent/server/AgentServer.sh`; readiness is TCP-based on the nginx data-plane port while admin MCP tools remain served by the sidecar.
 
 The agent must not declare `routerAccess`, `httpServices`, `guest`, `ssoProvider`, or top-level `ports`. The control plane is Explorer admin settings plus admin MCP tools. The default data-plane profile may publish nginx on loopback through `profiles.default.openPorts`, and a separate `lan` profile may bind that nginx port to `0.0.0.0` as an explicit reviewed data-plane exposure. This does not create a public dashboard route or direct MCP/control route.
 

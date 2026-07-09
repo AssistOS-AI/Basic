@@ -4,7 +4,7 @@
   "start": "node /code/runtime/supervisor.mjs",
   "agent": "sh /Agent/server/AgentServer.sh",
   "readiness": {
-    "protocol": "mcp"
+    "protocol": "tcp"
   },
   "containerSecurity": {
     "privileged": false
