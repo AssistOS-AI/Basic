@@ -54,7 +54,7 @@ flowchart LR
     Browser[External browser] --> Cloudflare[Cloudflare edge]
     Cloudflare --> Tunnel[Cloudflare Tunnel]
     Tunnel --> Supervisor[cloudflared supervisor]
-    Supervisor --> Router[Ploinky router on host.containers.internal:8080]
+    Supervisor --> Router[Ploinky router on ploinky-router:8080]
     Explorer[Explorer Settings] --> MCP[/cloudflared/mcp/]
     MCP --> Sidecar[Ploinky AgentServer sidecar]
     Sidecar --> Tools[Admin tunnel tools]
@@ -91,11 +91,11 @@ flowchart LR
                 Published application routes are configured through the
                 admin-only MCP tools and applied to Cloudflare when the
                 required Cloudflare API settings are present. For the Ploinky
-                router inside Ploinky box, the Cloudflare service URL should be
-                <code>http://host.containers.internal:8080</code>. From inside
-                the connector container, <code>localhost</code> means the
-                connector itself, so <code>localhost:8080</code> is not the
-                router origin.
+                router inside Ploinky box, the only accepted Cloudflare service
+                URL is <code>http://ploinky-router:8080</code>. The manifest's
+                isolated default network receives that alias from Ploinky's
+                managed gateway. Host-gateway, loopback, origin-override, and
+                sibling-agent targets are rejected.
             </p>
             <p>
                 Operators should protect the public hostname with Cloudflare

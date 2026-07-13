@@ -1,5 +1,53 @@
+import { isTurnHostname, normalizeIpv4 } from './routes.mjs';
+
 function normalizeString(value) {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+// Defense in depth: buildCloudflaredIngress already refuses a turn.* hostname in the
+// ingress plan, but the DNS-mutation entry points are reachable independently of that
+// plan, so they need their own guard against ever creating a Cloudflare-proxied record
+// for TURN — that would defeat the point of TURN being a DNS-only/L4 endpoint.
+function requireNoTurnHostnames(routes) {
+    const turnRoute = routes.find((route) => route?.enabled && isTurnHostname(route.hostname));
+    if (turnRoute) {
+        throw new Error(`TURN hostname ${turnRoute.hostname} must not receive a Cloudflare-proxied DNS record; use a DNS-only record instead.`);
+    }
+}
+
+function dnsRecordsForRoutes(routes, turnDnsRecord = null) {
+    requireNoTurnHostnames(routes);
+    const records = [];
+    for (const hostname of new Set(routes.filter((route) => route.enabled).map((route) => route.hostname))) {
+        records.push({
+            type: 'CNAME',
+            name: hostname,
+            content: '',
+            ttl: 1,
+            proxied: true,
+        });
+    }
+    if (turnDnsRecord) {
+        let turnAddress = '';
+        try {
+            turnAddress = normalizeIpv4(turnDnsRecord.content, 'TURN DNS record address');
+        } catch {
+            turnAddress = '';
+        }
+        if (
+            turnDnsRecord.type !== 'A'
+            || !isTurnHostname(turnDnsRecord.name)
+            || turnDnsRecord.proxied !== false
+            || !turnAddress
+        ) {
+            throw new Error('TURN DNS record must be an unproxied A record with a bare IPv4 address on a turn.* hostname.');
+        }
+        if (records.some((record) => record.name === turnDnsRecord.name)) {
+            throw new Error(`TURN DNS hostname ${turnDnsRecord.name} conflicts with an HTTP tunnel hostname.`);
+        }
+        records.push({ ...turnDnsRecord });
+    }
+    return records;
 }
 
 export function getCloudflareConfig(env = process.env) {
@@ -89,54 +137,73 @@ export async function putTunnelIngress(ingress, { env = process.env } = {}) {
     );
 }
 
-export async function preflightDnsRecordAccess(routes, { env = process.env } = {}) {
+export async function preflightDnsRecordAccess(routes, {
+    env = process.env,
+    turnDnsRecord = null,
+} = {}) {
     const config = requireCloudflareConfig(env, { requireZone: true });
-    const hostnames = Array.from(new Set(routes.filter((route) => route.enabled).map((route) => route.hostname)));
-    for (const hostname of hostnames) {
-        const query = new URLSearchParams({ type: 'CNAME', name: hostname });
+    const records = dnsRecordsForRoutes(routes, turnDnsRecord);
+    for (const record of records) {
+        const query = new URLSearchParams({ name: record.name });
         await requestCloudflare(config, 'GET', `/zones/${encodeURIComponent(config.zoneId)}/dns_records?${query.toString()}`);
     }
-    return { ok: true, hostnames };
+    return { ok: true, hostnames: records.map((record) => record.name) };
 }
 
-export async function upsertDnsRecords(routes, { env = process.env } = {}) {
-    const config = requireCloudflareConfig(env, { requireTunnel: true, requireZone: true });
-    const hostnames = Array.from(new Set(routes.filter((route) => route.enabled).map((route) => route.hostname)));
+export async function upsertDnsRecords(routes, {
+    env = process.env,
+    turnDnsRecord = null,
+} = {}) {
+    const records = dnsRecordsForRoutes(routes, turnDnsRecord);
+    const config = requireCloudflareConfig(env, {
+        requireTunnel: records.some((record) => record.type === 'CNAME'),
+        requireZone: true,
+    });
     const results = [];
-    for (const hostname of hostnames) {
-        const query = new URLSearchParams({ type: 'CNAME', name: hostname });
+    for (const record of records) {
+        const query = new URLSearchParams({ name: record.name });
         const existingRecords = await requestCloudflare(config, 'GET', `/zones/${encodeURIComponent(config.zoneId)}/dns_records?${query.toString()}`);
-        const existing = Array.isArray(existingRecords) ? existingRecords[0] : null;
+        const exactRecords = Array.isArray(existingRecords)
+            ? existingRecords.filter((entry) => String(entry?.name || '').toLowerCase() === record.name.toLowerCase())
+            : [];
+        const existing = exactRecords.find((entry) => entry.type === record.type) || exactRecords[0] || null;
         const body = {
-            type: 'CNAME',
-            name: hostname,
-            content: `${config.tunnelId}.cfargotunnel.com`,
-            ttl: 1,
-            proxied: true,
+            ...record,
+            content: record.type === 'CNAME' ? `${config.tunnelId}.cfargotunnel.com` : record.content,
         };
         if (existing?.id) {
             const updated = await requestCloudflare(config, 'PATCH', `/zones/${encodeURIComponent(config.zoneId)}/dns_records/${encodeURIComponent(existing.id)}`, body);
-            results.push({ hostname, action: 'updated', id: updated?.id || existing.id });
+            results.push({ hostname: record.name, type: record.type, proxied: record.proxied, action: 'updated', id: updated?.id || existing.id });
         } else {
             const created = await requestCloudflare(config, 'POST', `/zones/${encodeURIComponent(config.zoneId)}/dns_records`, body);
-            results.push({ hostname, action: 'created', id: created?.id || '' });
+            results.push({ hostname: record.name, type: record.type, proxied: record.proxied, action: 'created', id: created?.id || '' });
         }
     }
     return results;
 }
 
-export function planTunnelChanges({ tunnelName = '', ingress = [], createDnsRecords = false } = {}, { env = process.env } = {}) {
+export function planTunnelChanges({
+    tunnelId = '',
+    tunnelName = '',
+    ingress = [],
+    createDnsRecords = false,
+    turnDnsRecord = null,
+} = {}, { env = process.env } = {}) {
     const config = getCloudflareConfig(env);
     return {
         apiTokenConfigured: Boolean(config.apiToken),
         accountIdConfigured: Boolean(config.accountId),
         zoneIdConfigured: Boolean(config.zoneId),
-        tunnelId: config.tunnelId,
+        tunnelId: tunnelId || config.tunnelId,
         tunnelName: tunnelName || config.tunnelName,
         ingress,
         createDnsRecords: createDnsRecords === true,
         dnsHostnames: createDnsRecords
-            ? ingress.filter((entry) => entry.hostname).map((entry) => entry.hostname)
+            ? [
+                ...ingress.filter((entry) => entry.hostname).map((entry) => entry.hostname),
+                ...(turnDnsRecord ? [turnDnsRecord.name] : []),
+            ]
             : [],
+        turnDnsRecord: createDnsRecords && turnDnsRecord ? { ...turnDnsRecord } : null,
     };
 }

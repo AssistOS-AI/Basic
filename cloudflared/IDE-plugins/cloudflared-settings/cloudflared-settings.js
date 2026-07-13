@@ -3,12 +3,7 @@ const DEFAULT_ORIGINS = Object.freeze([
     Object.freeze({
         id: 'router',
         label: 'Ploinky router',
-        service: 'http://host.containers.internal:8080'
-    }),
-    Object.freeze({
-        id: 'onlyoffice',
-        label: 'OnlyOffice Document Server',
-        service: 'http://host.containers.internal:8082'
+        service: 'http://ploinky-router:8080'
     })
 ]);
 
@@ -78,7 +73,10 @@ function normalizeOrigins(origins) {
     const normalized = Array.isArray(origins)
         ? origins.map(normalizeOrigin).filter((entry) => entry.id)
         : [];
-    return normalized.length ? normalized : DEFAULT_ORIGINS.map(normalizeOrigin);
+    const router = normalized.find((entry) => (
+        entry.id === 'router' && entry.service === 'http://ploinky-router:8080'
+    ));
+    return router ? [router] : DEFAULT_ORIGINS.map(normalizeOrigin);
 }
 
 function routeToDraft(route = {}, index = 0, origins = DEFAULT_ORIGINS) {

@@ -63,6 +63,17 @@ test('cloudflared manifest maps the required tunnel token from a workspace varia
     });
 });
 
+test('cloudflared manifest uses its isolated default network without sibling coupling', () => {
+    const manifest = readCloudflaredManifest();
+    const serialized = JSON.stringify(manifest);
+
+    assert.deepEqual(manifest.network, { mode: 'default' });
+    assert.equal(Object.hasOwn(manifest.network, 'aliases'), false);
+    assert.equal(Object.hasOwn(manifest, 'enable'), false);
+    assert.equal(Object.hasOwn(manifest.profiles.default.env, 'CLOUDFLARED_ALLOWED_ORIGINS_JSON'), false);
+    assert.doesNotMatch(serialized, /office-publishing|webmeet-signaling|host\.containers\.internal/i);
+});
+
 test('cloudflared manifest exposes an admin-only Explorer settings dashboard', () => {
     const manifest = readCloudflaredManifest();
 

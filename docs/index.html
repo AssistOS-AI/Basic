@@ -127,12 +127,12 @@ flowchart LR
                 <code>cloudflared</code> runs Cloudflare Tunnel as an outbound
                 connector from inside Ploinky box. Operators configure
                 Cloudflare public hostnames to target the Ploinky router at
-                <code>http://host.containers.internal:8080</code> from the
-                connector container's point of view. The connector does not
+                <code>http://ploinky-router:8080</code> over the connector's
+                isolated default network. Host-gateway and sibling-agent
+                origins are rejected. The connector does not
                 declare direct port publication, guest access, service routes,
-                or MCP exposure; direct data-plane ports such as LiveKit or
-                OnlyOffice remain explicit <code>--publish</code> or
-                <code>--webmeet-ports</code> decisions.
+                or MCP exposure; direct data-plane ports remain outside this
+                agent's contract.
             </p>
             <p>
                 See <a href="cloudflared.html">cloudflared</a> for operator

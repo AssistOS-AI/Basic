@@ -6,10 +6,21 @@
             <option value="cloudflare-api">cloudflare-api</option>
             <option value="nginx-cloudflare">nginx-cloudflare</option>
         </select>
+        <select id="webPublishingTlsEdge" aria-label="Trusted TLS edge">
+            <option value="none">TLS edge: none (local)</option>
+            <option value="cloudflare">TLS edge: Cloudflare</option>
+            <option value="external">TLS edge: external</option>
+        </select>
         <input id="webPublishingBaseDomain" type="text" autocomplete="off" placeholder="example.com">
+        <input id="webPublishingLivekitMediaIp" type="text" inputmode="decimal" autocomplete="off" placeholder="LiveKit media IPv4">
+        <input id="webPublishingTurnExternalIp" type="text" inputmode="decimal" autocomplete="off" placeholder="TURN external IPv4">
+        <input id="webPublishingTunnelSource" type="hidden">
+        <input id="webPublishingTunnelTokenSet" type="hidden">
+        <input id="webPublishingTunnelId" type="hidden">
+        <input id="webPublishingTunnelName" type="hidden">
         <label class="web-publishing-check">
             <input id="webPublishingCreateDns" type="checkbox">
-            <span>Create DNS</span>
+            <span>Create tunnel and DNS records</span>
         </label>
         <button id="webPublishingRefresh" type="button">Refresh</button>
         <button id="webPublishingValidate" type="button">Validate</button>

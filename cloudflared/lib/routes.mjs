@@ -2,19 +2,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const DEFAULT_STATE_FILE = '/root/cloudflared/routes.json';
-const HOST_GATEWAY = 'host.containers.internal';
+const ROUTER_SERVICE = 'http://ploinky-router:8080';
 const DEFAULT_ORIGINS = [
   {
     id: 'router',
     label: 'Ploinky router',
-    service: 'http://host.containers.internal:8080',
+    service: ROUTER_SERVICE,
     description: 'Router-hosted Explorer and agent HTTP/WebSocket surfaces.',
-  },
-  {
-    id: 'onlyoffice',
-    label: 'OnlyOffice Document Server',
-    service: 'http://host.containers.internal:8082',
-    description: 'OnlyOffice editor surface when the ploinky-box host port is published.',
   },
 ];
 
@@ -62,46 +56,21 @@ function normalizeService(value) {
   } catch {
     throw new Error(`Invalid route service URL: ${raw}`);
   }
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    throw new Error('Route service must use http or https.');
-  }
-  if (parsed.hostname !== HOST_GATEWAY) {
-    throw new Error(`Route service host must be ${HOST_GATEWAY}.`);
-  }
-  if (!parsed.port) {
-    throw new Error('Route service must include an explicit port.');
-  }
-  if (parsed.pathname !== '/' || parsed.search || parsed.hash) {
+  if (parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) {
     throw new Error('Route service must be an origin URL without path, query, or fragment.');
   }
-  if (parsed.port === '7000') {
-    throw new Error('Do not tunnel raw Ploinky AgentServer/MCP port 7000.');
+  if (parsed.origin !== ROUTER_SERVICE) {
+    throw new Error(`Route service must equal ${ROUTER_SERVICE}.`);
   }
-  return `${parsed.protocol}//${HOST_GATEWAY}:${parsed.port}`;
+  return ROUTER_SERVICE;
 }
 
 export function loadOriginPresets(env = process.env) {
   const raw = normalizeString(env.CLOUDFLARED_ALLOWED_ORIGINS_JSON);
-  if (!raw) return DEFAULT_ORIGINS;
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error('CLOUDFLARED_ALLOWED_ORIGINS_JSON must be valid JSON.');
+  if (raw) {
+    throw new Error('CLOUDFLARED_ALLOWED_ORIGINS_JSON overrides are not supported.');
   }
-  if (!Array.isArray(parsed)) {
-    throw new Error('CLOUDFLARED_ALLOWED_ORIGINS_JSON must be an array.');
-  }
-  const origins = parsed.map((entry) => ({
-    id: normalizeString(entry?.id),
-    label: normalizeString(entry?.label),
-    service: normalizeService(entry?.service),
-    description: normalizeString(entry?.description),
-  }));
-  if (!origins.length || origins.some((entry) => !entry.id || !entry.label || !entry.service)) {
-    throw new Error('Every allowed origin requires id, label, and service.');
-  }
-  return origins;
+  return DEFAULT_ORIGINS.map((origin) => ({ ...origin }));
 }
 
 export function normalizeRoutes(inputRoutes, { env = process.env } = {}) {

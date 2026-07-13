@@ -6,6 +6,9 @@
   "readiness": {
     "protocol": "mcp"
   },
+  "network": {
+    "mode": "default"
+  },
   "endpoints": {
     "agent-card": {
       "name": "Cloudflare Tunnel",
@@ -50,9 +53,6 @@
           "required": false
         },
         "CLOUDFLARE_BASE_DOMAIN": {
-          "required": false
-        },
-        "CLOUDFLARED_ALLOWED_ORIGINS_JSON": {
           "required": false
         },
         "CLOUDFLARED_STATE_FILE": {

@@ -28,7 +28,6 @@ Set secrets with `ploinky var`; do not commit token values.
 | `CLOUDFLARE_ZONE_ID` | for dashboard DNS | Zone where dashboard-created CNAME records live. |
 | `CLOUDFLARE_TUNNEL_ID` | for dashboard apply | Tunnel UUID. |
 | `CLOUDFLARE_BASE_DOMAIN` | recommended | Limits dashboard hostnames to one domain suffix. |
-| `CLOUDFLARED_ALLOWED_ORIGINS_JSON` | optional | JSON array of allowed `host.containers.internal:<port>` origins for published non-router HTTP services. |
 
 ## Explorer Dashboard
 
@@ -54,10 +53,13 @@ Default production routing should point at the Ploinky router:
 
 | Origin preset | Service URL | Notes |
 | --- | --- | --- |
-| `router` | `http://host.containers.internal:8080` | Router-hosted Explorer and agent HTTP/WebSocket surfaces. |
-| `onlyoffice` | `http://host.containers.internal:8082` | Only works when that box-side host port is published. |
+| `router` | `http://ploinky-router:8080` | The only supported origin: router-hosted Explorer and agent HTTP/WebSocket surfaces. |
 
-Cloudflare Tunnel can expose HTTP and WebSocket origins. It does not expose LiveKit UDP media by itself. LiveKit media and other direct data planes still need explicit `ploinky start explorer --publish HOST:BOX` mappings and their own app-level credentials.
+The manifest uses its isolated default network. Ploinky's managed gateway joins
+that network under the `ploinky-router` alias, so the connector needs no host
+gateway and no shared WebMeet or office network. Origin overrides, loopback,
+host-gateway targets, and sibling-agent targets are rejected. Direct media and
+editor data planes are outside this agent's contract.
 
 ## Configure Ploinky
 
@@ -106,20 +108,9 @@ edge policy, a published application route can be reachable from the Internet.
 invalid tunnel token should not prevent the local router and workspace agents
 from starting.
 
-For direct ports that are not router-hosted HTTP/WebSocket surfaces, publish
-them explicitly when creating or updating the Ploinky box:
-
-```bash
-ploinky start explorer --publish 127.0.0.1:8082:8082
-ploinky start explorer --webmeet-ports
-```
-
-Use `127.0.0.1` for host-local exposure and `0.0.0.0` only when the port is
-intentionally reachable on LAN/public interfaces.
-
 ## Security Boundary
 
 Keep Ploinky application surfaces behind the router. Do not tunnel random agent
-`7000` ports, MCP ports, internal callback or storage ports, or task-status
-endpoints directly. Direct media or data planes such as LiveKit must have their
-own credentials and remain an explicit manifest/spec decision.
+`7000` ports, MCP ports, internal callback or storage ports, task-status
+endpoints, or sibling-agent services directly. Direct media or data planes are
+owned by their respective manifests and specs.

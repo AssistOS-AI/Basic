@@ -64,9 +64,22 @@ export function modeUsesCloudflareApply(mode, createDnsRecords = false) {
 }
 
 export function draftConfigFromDocument(documentRef = document) {
+    const tunnelSource = documentRef?.getElementById?.('webPublishingTunnelSource')?.value || '';
+    const tunnelTokenSet = documentRef?.getElementById?.('webPublishingTunnelTokenSet')?.value === 'true';
+    const tunnelId = documentRef?.getElementById?.('webPublishingTunnelId')?.value || '';
+    const tunnelName = documentRef?.getElementById?.('webPublishingTunnelName')?.value || '';
     return {
         mode: documentRef?.getElementById?.('webPublishingMode')?.value || 'nginx',
+        tlsEdge: documentRef?.getElementById?.('webPublishingTlsEdge')?.value || 'none',
         baseDomain: documentRef?.getElementById?.('webPublishingBaseDomain')?.value || '',
+        livekitMediaIp: documentRef?.getElementById?.('webPublishingLivekitMediaIp')?.value || '',
+        turnExternalIp: documentRef?.getElementById?.('webPublishingTurnExternalIp')?.value || '',
+        tunnel: {
+            source: tunnelSource,
+            tokenSet: tunnelTokenSet,
+            tunnelId,
+            tunnelName,
+        },
     };
 }
 
@@ -98,11 +111,28 @@ export async function refreshPublishingState({
     if (result.ok) {
         const config = result.config || {};
         const mode = documentRef?.getElementById?.('webPublishingMode');
+        const tlsEdge = documentRef?.getElementById?.('webPublishingTlsEdge');
         const baseDomain = documentRef?.getElementById?.('webPublishingBaseDomain');
+        const livekitMediaIp = documentRef?.getElementById?.('webPublishingLivekitMediaIp');
+        const turnExternalIp = documentRef?.getElementById?.('webPublishingTurnExternalIp');
+        const tunnelSource = documentRef?.getElementById?.('webPublishingTunnelSource');
+        const tunnelTokenSet = documentRef?.getElementById?.('webPublishingTunnelTokenSet');
+        const tunnelId = documentRef?.getElementById?.('webPublishingTunnelId');
+        const tunnelName = documentRef?.getElementById?.('webPublishingTunnelName');
         if (mode && config.mode) mode.value = config.mode;
+        if (tlsEdge && config.tlsEdge) tlsEdge.value = config.tlsEdge;
         if (baseDomain && config.baseDomain) baseDomain.value = config.baseDomain;
+        if (livekitMediaIp) livekitMediaIp.value = config.livekitMediaIp || '';
+        if (turnExternalIp) turnExternalIp.value = config.turnExternalIp || '';
+        if (tunnelSource) tunnelSource.value = config.tunnel?.source || '';
+        if (tunnelTokenSet) tunnelTokenSet.value = config.tunnel?.tokenSet ? 'true' : 'false';
+        if (tunnelId) tunnelId.value = config.tunnel?.tunnelId || '';
+        if (tunnelName) tunnelName.value = config.tunnel?.tunnelName || '';
         updateStateIndicators(result, documentRef);
-        setStatus(`Mode ${config.mode || 'unknown'}`, documentRef);
+        setStatus(
+            `Mode ${config.mode || 'unknown'} · state ${result.status?.state || 'unknown'}`,
+            documentRef,
+        );
     } else {
         setStatus(result.error || 'Refresh failed', documentRef);
     }
@@ -131,8 +161,12 @@ export async function applyPublishingConfig({
         return saved;
     }
     updateStateIndicators(saved, documentRef);
+    if (saved.restartRequired) {
+        setStatus('Saved; restart Web Publishing to apply', documentRef);
+        return saved;
+    }
     if (!modeUsesCloudflareApply(config.mode, createDnsRecords)) {
-        setStatus('Saved', documentRef);
+        setStatus('Applied', documentRef);
         return saved;
     }
     const applied = await invokeTool('web_publishing_cloudflare_tunnel_apply', {
@@ -140,7 +174,12 @@ export async function applyPublishingConfig({
         createDnsRecords,
     });
     updateStateIndicators(applied, documentRef);
-    setStatus(applied.ok ? 'Applied' : applied.error || 'Apply failed', documentRef);
+    setStatus(
+        applied.ok && applied.applied
+            ? 'Applied'
+            : applied.error || (applied.restartRequired ? 'Restart required' : 'Apply failed'),
+        documentRef,
+    );
     return applied;
 }
 

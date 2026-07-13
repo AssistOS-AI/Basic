@@ -24,8 +24,8 @@ test('normalizeRouteDrafts prepares only complete enabled route drafts', () => {
                 enabled: true,
                 hostname: ' App.Example.COM ',
                 path: 'office',
-                originId: ' onlyoffice ',
-                description: 'Office dashboard',
+                originId: ' router ',
+                description: 'Explorer dashboard',
             },
             {
                 enabled: true,
@@ -45,11 +45,21 @@ test('normalizeRouteDrafts prepares only complete enabled route drafts', () => {
                 enabled: true,
                 hostname: 'app.example.com',
                 path: '/office',
-                originId: 'onlyoffice',
-                description: 'Office dashboard',
+                originId: 'router',
+                description: 'Explorer dashboard',
             },
         ],
     );
+});
+
+test('settings dashboard contains only the fixed Ploinky router preset', () => {
+    const source = fs.readFileSync(
+        path.join(repoRoot, 'cloudflared/IDE-plugins/cloudflared-settings/cloudflared-settings.js'),
+        'utf8',
+    );
+
+    assert.match(source, /http:\/\/ploinky-router:8080/);
+    assert.doesNotMatch(source, /host\.containers\.internal|host\.docker\.internal|\bonlyoffice\b/i);
 });
 
 test('parseCloudflaredToolPayload extracts JSON MCP text content', () => {

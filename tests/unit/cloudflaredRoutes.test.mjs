@@ -21,7 +21,7 @@ test('normalizeRoutes accepts hostnames under the configured base domain', () =>
             hostname: 'explorer.example.com',
             path: '',
             originId: 'router',
-            service: 'http://host.containers.internal:8080',
+            service: 'http://ploinky-router:8080',
             description: '',
         },
     ]);
@@ -29,16 +29,16 @@ test('normalizeRoutes accepts hostnames under the configured base domain', () =>
 
 test('buildIngress appends a catch-all 404 rule', () => {
     const { routes } = normalizeRoutes([
-        { hostname: 'office.example.com', path: '/office', originId: 'onlyoffice' },
+        { hostname: 'explorer.example.com', path: '/agents', originId: 'router' },
     ], {
         env: { CLOUDFLARE_BASE_DOMAIN: 'example.com' },
     });
 
     assert.deepEqual(buildIngress(routes), [
         {
-            hostname: 'office.example.com',
-            path: '/office',
-            service: 'http://host.containers.internal:8082',
+            hostname: 'explorer.example.com',
+            path: '/agents',
+            service: 'http://ploinky-router:8080',
         },
         { service: 'http_status:404' },
     ]);
@@ -47,8 +47,8 @@ test('buildIngress appends a catch-all 404 rule', () => {
 test('buildIngress places path-specific routes before host catch-all routes', () => {
     const { routes } = normalizeRoutes([
         { hostname: 'app.example.com', originId: 'router' },
-        { hostname: 'app.example.com', path: '/office', originId: 'onlyoffice' },
-        { hostname: 'app.example.com', path: '/office/admin', originId: 'onlyoffice' },
+        { hostname: 'app.example.com', path: '/agents', originId: 'router' },
+        { hostname: 'app.example.com', path: '/agents/admin', originId: 'router' },
     ], {
         env: { CLOUDFLARE_BASE_DOMAIN: 'example.com' },
     });
@@ -56,17 +56,17 @@ test('buildIngress places path-specific routes before host catch-all routes', ()
     assert.deepEqual(buildIngress(routes), [
         {
             hostname: 'app.example.com',
-            path: '/office/admin',
-            service: 'http://host.containers.internal:8082',
+            path: '/agents/admin',
+            service: 'http://ploinky-router:8080',
         },
         {
             hostname: 'app.example.com',
-            path: '/office',
-            service: 'http://host.containers.internal:8082',
+            path: '/agents',
+            service: 'http://ploinky-router:8080',
         },
         {
             hostname: 'app.example.com',
-            service: 'http://host.containers.internal:8080',
+            service: 'http://ploinky-router:8080',
         },
         { service: 'http_status:404' },
     ]);
@@ -76,8 +76,8 @@ test('buildIngress groups same-host path routes before host catch-all routes whe
     const { routes } = normalizeRoutes([
         { hostname: 'app.example.com', originId: 'router' },
         { hostname: 'other.example.com', originId: 'router' },
-        { hostname: 'app.example.com', path: '/office', originId: 'onlyoffice' },
-        { hostname: 'app.example.com', path: '/office/admin', originId: 'onlyoffice' },
+        { hostname: 'app.example.com', path: '/agents', originId: 'router' },
+        { hostname: 'app.example.com', path: '/agents/admin', originId: 'router' },
     ], {
         env: { CLOUDFLARE_BASE_DOMAIN: 'example.com' },
     });
@@ -99,21 +99,21 @@ test('buildIngress groups same-host path routes before host catch-all routes whe
     assert.deepEqual(ingress, [
         {
             hostname: 'app.example.com',
-            path: '/office/admin',
-            service: 'http://host.containers.internal:8082',
+            path: '/agents/admin',
+            service: 'http://ploinky-router:8080',
         },
         {
             hostname: 'app.example.com',
-            path: '/office',
-            service: 'http://host.containers.internal:8082',
+            path: '/agents',
+            service: 'http://ploinky-router:8080',
         },
         {
             hostname: 'app.example.com',
-            service: 'http://host.containers.internal:8080',
+            service: 'http://ploinky-router:8080',
         },
         {
             hostname: 'other.example.com',
-            service: 'http://host.containers.internal:8080',
+            service: 'http://ploinky-router:8080',
         },
         { service: 'http_status:404' },
     ]);
@@ -130,41 +130,65 @@ test('normalizeRoutes rejects hostnames outside the base domain', () => {
     );
 });
 
-test('normalizeRoutes rejects raw AgentServer port exposure', () => {
+test('loadOriginPresets exposes only the fixed Ploinky router origin', () => {
+    assert.deepEqual(loadOriginPresets({}), [
+        {
+            id: 'router',
+            label: 'Ploinky router',
+            service: 'http://ploinky-router:8080',
+            description: 'Router-hosted Explorer and agent HTTP/WebSocket surfaces.',
+        },
+    ]);
+});
+
+test('loadOriginPresets rejects environment overrides instead of opening host gateways', () => {
     assert.throws(
-        () => normalizeRoutes([
-            {
-                hostname: 'agent.example.com',
-                originId: 'custom',
-                service: 'http://host.containers.internal:7000',
-            },
-        ], {
-            env: {
-                CLOUDFLARE_BASE_DOMAIN: 'example.com',
-                CLOUDFLARED_ALLOWED_ORIGINS_JSON: JSON.stringify([
-                    {
-                        id: 'custom',
-                        label: 'Unsafe raw agent port',
-                        service: 'http://host.containers.internal:7000',
-                    },
-                ]),
-            },
+        () => loadOriginPresets({
+            CLOUDFLARED_ALLOWED_ORIGINS_JSON: JSON.stringify([
+                {
+                    id: 'router',
+                    label: 'Unsafe host gateway',
+                    service: 'http://host.containers.internal:8080',
+                },
+            ]),
         }),
-        /AgentServer\/MCP port 7000/,
+        /overrides are not supported/,
     );
 });
 
-test('loadOriginPresets accepts explicit published host origins', () => {
-    const origins = loadOriginPresets({
-        CLOUDFLARED_ALLOWED_ORIGINS_JSON: JSON.stringify([
-            {
-                id: 'livekit-http',
-                label: 'LiveKit HTTP signaling',
-                service: 'http://host.containers.internal:7880',
-            },
-        ]),
-    });
+test('normalizeRoutes rejects host gateways, loopback, alternate services, and URL decorations', () => {
+    for (const service of [
+        'http://host.containers.internal:8080',
+        'http://localhost:8080',
+        'http://127.0.0.1:8080',
+        'http://ploinky-router:8082',
+        'https://ploinky-router:8080',
+        'http://ploinky-router:8080/path',
+        'http://user:secret@ploinky-router:8080',
+    ]) {
+        assert.throws(
+            () => normalizeRoutes([
+                {
+                    hostname: 'explorer.example.com',
+                    originId: 'router',
+                    service,
+                },
+            ], {
+                env: { CLOUDFLARE_BASE_DOMAIN: 'example.com' },
+            }),
+            /must equal http:\/\/ploinky-router:8080|origin URL/,
+            service,
+        );
+    }
+});
 
-    assert.equal(origins.length, 1);
-    assert.equal(origins[0].service, 'http://host.containers.internal:7880');
+test('normalizeRoutes rejects undeclared sibling-agent origins', () => {
+    assert.throws(
+        () => normalizeRoutes([
+            { hostname: 'office.example.com', originId: 'onlyoffice' },
+        ], {
+            env: { CLOUDFLARE_BASE_DOMAIN: 'example.com' },
+        }),
+        /Unknown originId.*onlyoffice/,
+    );
 });

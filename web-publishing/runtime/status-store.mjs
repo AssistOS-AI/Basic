@@ -1,9 +1,133 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 export const defaultConfigFile = '/data/config.json';
 export const defaultStatusFile = '/data/status.json';
 export const defaultSecretStateFile = '/data/secret-state.json';
+const DEFAULT_LOCK_TIMEOUT_MS = 10_000;
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function processIsAlive(pid) {
+    if (!Number.isSafeInteger(pid) || pid <= 1) return false;
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return error?.code !== 'ESRCH';
+    }
+}
+
+function participantPid(fileName) {
+    const match = fileName.match(/\.(?:choosing|ticket)\.(\d+)-/);
+    return match ? Number(match[1]) : NaN;
+}
+
+async function listLockParticipants(lockFile, kind) {
+    const directory = path.dirname(lockFile);
+    const prefix = `${path.basename(lockFile)}.${kind}.`;
+    try {
+        const names = (await fs.readdir(directory)).filter((name) => name.startsWith(prefix));
+        const participants = [];
+        for (const name of names) {
+            const filePath = path.join(directory, name);
+            try {
+                const payload = JSON.parse(await fs.readFile(filePath, 'utf8'));
+                participants.push({ filePath, name, payload });
+            } catch (error) {
+                if (error?.code !== 'ENOENT') {
+                    participants.push({
+                        filePath,
+                        name,
+                        payload: { pid: participantPid(name), ticket: 0, invalid: true },
+                    });
+                }
+            }
+        }
+        return participants;
+    } catch (error) {
+        if (error?.code === 'ENOENT') return [];
+        throw error;
+    }
+}
+
+async function liveLockParticipants(lockFile, kind) {
+    const participants = await listLockParticipants(lockFile, kind);
+    const live = [];
+    for (const participant of participants) {
+        if (processIsAlive(Number(participant.payload.pid))) {
+            live.push(participant);
+        } else {
+            // Participant paths contain a per-attempt UUID and are never reused,
+            // so deleting a dead owner's unique file cannot unlink a successor.
+            await fs.unlink(participant.filePath).catch((error) => {
+                if (error?.code !== 'ENOENT') throw error;
+            });
+        }
+    }
+    return live;
+}
+
+export async function withFileLock(lockFile, operation, {
+    timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
+    retryMs = 10,
+} = {}) {
+    await fs.mkdir(path.dirname(lockFile), { recursive: true });
+    const deadline = Date.now() + timeoutMs;
+    const participantId = `${process.pid}-${randomUUID()}`;
+    const choosingFile = `${lockFile}.choosing.${participantId}`;
+    const ticketFile = `${lockFile}.ticket.${participantId}`;
+    const owner = {
+        id: participantId,
+        pid: process.pid,
+        createdAt: new Date().toISOString(),
+    };
+    await fs.writeFile(choosingFile, `${JSON.stringify(owner)}\n`, {
+        encoding: 'utf8',
+        flag: 'wx',
+        mode: 0o600,
+    });
+    try {
+        const existingTickets = await liveLockParticipants(lockFile, 'ticket');
+        const ticket = existingTickets.reduce(
+            (maximum, participant) => Math.max(maximum, Number(participant.payload.ticket) || 0),
+            0,
+        ) + 1;
+        await fs.writeFile(ticketFile, `${JSON.stringify({ ...owner, ticket })}\n`, {
+            encoding: 'utf8',
+            flag: 'wx',
+            mode: 0o600,
+        });
+        await fs.unlink(choosingFile);
+
+        while (true) {
+            const choosing = await liveLockParticipants(lockFile, 'choosing');
+            const tickets = await liveLockParticipants(lockFile, 'ticket');
+            const predecessor = tickets.some((participant) => {
+                if (participant.payload.id === participantId) return false;
+                if (participant.payload.invalid) return true;
+                const otherTicket = Number(participant.payload.ticket);
+                return otherTicket < ticket
+                    || (otherTicket === ticket && String(participant.payload.id) < participantId);
+            });
+            if (!choosing.length && !predecessor) break;
+            if (Date.now() >= deadline) {
+                throw new Error(`Timed out waiting for Web Publishing state lock: ${path.basename(lockFile)}`);
+            }
+            await sleep(retryMs);
+        }
+        return await operation();
+    } finally {
+        await Promise.all([choosingFile, ticketFile].map((filePath) => (
+            fs.unlink(filePath).catch((error) => {
+                if (error?.code !== 'ENOENT') throw error;
+            })
+        )));
+    }
+}
 
 function dataFileFromEnv(env, key, defaultFile, fileName) {
     const configured = env[key] || '';
@@ -36,7 +160,7 @@ export async function readJsonFile(filePath, fallback) {
 
 export async function writeJsonFile(filePath, payload, { mode } = {}) {
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
     await fs.writeFile(tempPath, `${JSON.stringify(payload, null, 2)}\n`, {
         encoding: 'utf8',
         ...(mode ? { mode } : {}),
@@ -48,28 +172,19 @@ export async function writeJsonFile(filePath, payload, { mode } = {}) {
 }
 
 export async function readConfig({ env = process.env } = {}) {
-    return readJsonFile(configFileFromEnv(env), {
-        version: 1,
-        mode: 'nginx',
-        baseDomain: '',
-        lanHost: '127.0.0.1',
-        certEmail: '',
-        tunnel: {
-            source: 'none',
-            tokenSet: false,
-            tunnelId: '',
-            tunnelName: '',
-        },
-        exposures: [],
-    });
+    // An absent file means "no saved dashboard override". Supplying normalized
+    // local defaults here would outrank deployment env in normalizePublishingConfig
+    // and break the first production start before the dashboard has saved anything.
+    return readJsonFile(configFileFromEnv(env), {});
 }
 
 export async function writeConfig(config, { env = process.env } = {}) {
-    return writeJsonFile(configFileFromEnv(env), {
+    const filePath = configFileFromEnv(env);
+    return withFileLock(`${filePath}.lock`, () => writeJsonFile(filePath, {
         version: 1,
         updatedAt: new Date().toISOString(),
         ...config,
-    });
+    }));
 }
 
 export async function readStatus({ env = process.env } = {}) {
@@ -82,11 +197,14 @@ export async function readStatus({ env = process.env } = {}) {
 }
 
 export async function writeStatus(update, { env = process.env } = {}) {
-    const previous = await readStatus({ env }).catch(() => ({}));
-    return writeJsonFile(statusFileFromEnv(env), {
-        ...previous,
-        ...update,
-        updatedAt: new Date().toISOString(),
+    const filePath = statusFileFromEnv(env);
+    return withFileLock(`${filePath}.lock`, async () => {
+        const previous = await readJsonFile(filePath, {}).catch(() => ({}));
+        return writeJsonFile(filePath, {
+            ...previous,
+            ...update,
+            updatedAt: new Date().toISOString(),
+        });
     });
 }
 
@@ -100,12 +218,19 @@ export async function readSecretState({ env = process.env } = {}) {
 }
 
 export async function writeSecretState(update, { env = process.env } = {}) {
-    const previous = await readSecretState({ env }).catch(() => ({}));
-    return writeJsonFile(secretStateFileFromEnv(env), {
-        ...previous,
-        ...update,
-        updatedAt: new Date().toISOString(),
-    }, { mode: 0o600 });
+    const filePath = secretStateFileFromEnv(env);
+    return withFileLock(`${filePath}.lock`, async () => {
+        const previous = await readJsonFile(filePath, {}).catch(() => ({}));
+        return writeJsonFile(filePath, {
+            ...previous,
+            ...update,
+            updatedAt: new Date().toISOString(),
+        }, { mode: 0o600 });
+    });
+}
+
+export async function withOperationLock(operation, { env = process.env } = {}) {
+    return withFileLock(`${configFileFromEnv(env)}.operation.lock`, operation);
 }
 
 export function redactSecretState(secretState = {}) {

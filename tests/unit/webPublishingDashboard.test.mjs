@@ -8,9 +8,11 @@ import { resolveSettingsComponentBase } from '../../../AssistOSExplorer/explorer
 
 import {
     applyPublishingConfig,
+    draftConfigFromDocument,
     modeUsesCloudflareApply,
     normalizeExposureDrafts,
     parseWebPublishingToolPayload,
+    refreshPublishingState,
     shouldCreateDnsRecords,
     updateStateIndicators,
 } from '../../web-publishing/IDE-plugins/web-publishing-settings/web-publishing-settings.js';
@@ -107,7 +109,14 @@ test('DNS creation is unchecked by default and legacy token text is absent from 
 test('dashboard apply drives Cloudflare API apply only for API or DNS flows', async () => {
     const elements = new Map([
         ['webPublishingMode', { value: 'cloudflare-api' }],
+        ['webPublishingTlsEdge', { value: 'cloudflare' }],
         ['webPublishingBaseDomain', { value: 'example.com' }],
+        ['webPublishingLivekitMediaIp', { value: '203.0.113.10' }],
+        ['webPublishingTurnExternalIp', { value: '198.51.100.20' }],
+        ['webPublishingTunnelSource', { value: '' }],
+        ['webPublishingTunnelTokenSet', { value: 'false' }],
+        ['webPublishingTunnelId', { value: '' }],
+        ['webPublishingTunnelName', { value: '' }],
         ['webPublishingCreateDns', { checked: true }],
         ['webPublishingStatus', { textContent: '' }],
         ['webPublishingApiTokenState', { textContent: '' }],
@@ -127,6 +136,8 @@ test('dashboard apply drives Cloudflare API apply only for API or DNS flows', as
             calls.push({ tool, input });
             return {
                 ok: true,
+                applied: tool === 'web_publishing_cloudflare_tunnel_apply',
+                restartRequired: false,
                 config: {
                     mode: input.config?.mode || 'cloudflare-api',
                     cloudflare: {
@@ -148,7 +159,16 @@ test('dashboard apply drives Cloudflare API apply only for API or DNS flows', as
     assert.deepEqual(calls[1].input, {
         config: {
             mode: 'cloudflare-api',
+            tlsEdge: 'cloudflare',
             baseDomain: 'example.com',
+            livekitMediaIp: '203.0.113.10',
+            turnExternalIp: '198.51.100.20',
+            tunnel: {
+                source: '',
+                tokenSet: false,
+                tunnelId: '',
+                tunnelName: '',
+            },
         },
         createDnsRecords: true,
     });
@@ -156,6 +176,115 @@ test('dashboard apply drives Cloudflare API apply only for API or DNS flows', as
     assert.equal(elements.get('webPublishingTunnelTokenState').textContent, 'present');
     assert.equal(modeUsesCloudflareApply('nginx-cloudflare', false), false);
     assert.equal(modeUsesCloudflareApply('nginx-cloudflare', true), true);
+});
+
+test('dashboard performs no Cloudflare operation before a restart-required local cutover', async () => {
+    const elements = new Map([
+        ['webPublishingMode', { value: 'cloudflare-api' }],
+        ['webPublishingTlsEdge', { value: 'cloudflare' }],
+        ['webPublishingBaseDomain', { value: 'example.com' }],
+        ['webPublishingLivekitMediaIp', { value: '203.0.113.10' }],
+        ['webPublishingTurnExternalIp', { value: '198.51.100.20' }],
+        ['webPublishingTunnelSource', { value: '' }],
+        ['webPublishingTunnelTokenSet', { value: 'false' }],
+        ['webPublishingTunnelId', { value: '' }],
+        ['webPublishingTunnelName', { value: '' }],
+        ['webPublishingCreateDns', { checked: true }],
+        ['webPublishingStatus', { textContent: '' }],
+    ]);
+    const calls = [];
+    const result = await applyPublishingConfig({
+        documentRef: {
+            getElementById(id) {
+                return elements.get(id) || null;
+            },
+        },
+        invokeTool: async (tool, input = {}) => {
+            calls.push({ tool, input });
+            if (tool === 'web_publishing_config_apply') {
+                return { ok: true, persisted: true, applied: false, restartRequired: true };
+            }
+            throw new Error('Cloudflare apply must not be called before restart');
+        },
+    });
+
+    assert.equal(result.restartRequired, true);
+    assert.deepEqual(calls.map(({ tool }) => tool), ['web_publishing_config_apply']);
+    assert.equal(
+        elements.get('webPublishingStatus').textContent,
+        'Saved; restart Web Publishing to apply',
+    );
+});
+
+test('dashboard preserves restarted API tunnel identity for ordinary remote apply', async () => {
+    const elements = new Map([
+        ['webPublishingMode', { value: 'cloudflare-api' }],
+        ['webPublishingTlsEdge', { value: 'cloudflare' }],
+        ['webPublishingBaseDomain', { value: 'example.com' }],
+        ['webPublishingLivekitMediaIp', { value: '203.0.113.10' }],
+        ['webPublishingTurnExternalIp', { value: '198.51.100.20' }],
+        ['webPublishingTunnelSource', { value: '' }],
+        ['webPublishingTunnelTokenSet', { value: 'false' }],
+        ['webPublishingTunnelId', { value: '' }],
+        ['webPublishingTunnelName', { value: '' }],
+        ['webPublishingCreateDns', { checked: false }],
+        ['webPublishingStatus', { textContent: '' }],
+        ['webPublishingApiTokenState', { textContent: '' }],
+        ['webPublishingAccountState', { textContent: '' }],
+        ['webPublishingZoneState', { textContent: '' }],
+        ['webPublishingTunnelTokenState', { textContent: '' }],
+    ]);
+    const documentRef = {
+        getElementById(id) {
+            return elements.get(id) || null;
+        },
+    };
+    const activeConfig = {
+        mode: 'cloudflare-api',
+        tlsEdge: 'cloudflare',
+        baseDomain: 'example.com',
+        livekitMediaIp: '203.0.113.10',
+        turnExternalIp: '198.51.100.20',
+        tunnel: {
+            source: 'cloudflare-api',
+            tokenSet: true,
+            tunnelId: 'restarted-tunnel-id',
+            tunnelName: 'workspace',
+        },
+    };
+    await refreshPublishingState({
+        documentRef,
+        invokeTool: async () => ({
+            ok: true,
+            config: activeConfig,
+            cloudflare: {},
+            status: { state: 'running' },
+        }),
+    });
+    assert.deepEqual(draftConfigFromDocument(documentRef).tunnel, activeConfig.tunnel);
+    assert.equal(
+        elements.get('webPublishingStatus').textContent,
+        'Mode cloudflare-api · state running',
+    );
+
+    const calls = [];
+    const result = await applyPublishingConfig({
+        documentRef,
+        invokeTool: async (tool, input) => {
+            calls.push({ tool, input });
+            assert.deepEqual(input.config.tunnel, activeConfig.tunnel);
+            if (tool === 'web_publishing_config_apply') {
+                return { ok: true, applied: true, restartRequired: false, config: activeConfig };
+            }
+            return { ok: true, applied: true, remoteApplied: true, restartRequired: false, config: activeConfig };
+        },
+    });
+    assert.equal(result.remoteApplied, true);
+    assert.deepEqual(calls.map(({ tool }) => tool), [
+        'web_publishing_config_apply',
+        'web_publishing_cloudflare_tunnel_apply',
+    ]);
+    assert.equal(elements.get('webPublishingStatus').textContent, 'Applied');
 });
 
 test('dashboard state indicators render present and missing without secret values', () => {

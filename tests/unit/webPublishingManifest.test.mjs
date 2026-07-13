@@ -14,12 +14,10 @@ const outputNames = [
     'ONLYOFFICE_CALLBACK_BASE_URL',
     'WEBMEET_PUBLIC_LIVEKIT_URL',
     'WEBMEET_LIVEKIT_URL',
-    'WEBMEET_TLS_HOSTNAME',
+    'WEBMEET_LIVEKIT_NODE_IP',
     'WEBMEET_TURN_HOST',
     'WEBMEET_TURN_EXTERNAL_IP',
-    'WEBMEET_TURN_REALM',
-    'WEBMEET_CERT_EMAIL',
-    'WEBMEET_LIVEKIT_UPSTREAM',
+    'WEBMEET_TURN_ALLOWED_PEER_IPS',
     'WEB_PUBLISHING_CLOUDFLARED_TUNNEL_TOKEN',
     'WEB_PUBLISHING_CLOUDFLARE_TUNNEL_ID',
     'WEB_PUBLISHING_CLOUDFLARE_TUNNEL_NAME',
@@ -44,8 +42,8 @@ test('web-publishing manifest declares the custom nginx and cloudflared image', 
 
     assert.equal(manifest.container, 'docker.io/assistos/web-publishing-agent:node24-nginx-cloudflared');
     assert.equal(manifest.start, 'node /code/runtime/supervisor.mjs');
-    assert.equal(manifest.agent, 'sh /Agent/server/AgentServer.sh');
-    assert.equal(manifest.readiness?.protocol, 'tcp');
+    assert.equal(manifest.agent, 'node /code/runtime/wait-for-nginx.mjs && sh /Agent/server/AgentServer.sh');
+    assert.equal(manifest.readiness?.protocol, 'mcp');
     assert.equal(manifest.containerSecurity?.privileged, false);
 });
 
@@ -67,13 +65,38 @@ test('web-publishing manifest exposes only admin settings and loopback data-plan
         },
     ]);
 
-    assert.deepEqual(manifest.profiles.default.openPorts, ['127.0.0.1:8081:8081']);
-    assert.deepEqual(manifest.profiles.lan.openPorts, ['0.0.0.0:8081:8081']);
+    assert.deepEqual(manifest.profiles.default.openPorts, [
+        '127.0.0.1:17003:7000',
+        '127.0.0.1:8081:8081',
+        '127.0.0.1:18083:18083',
+    ]);
+    assert.deepEqual(manifest.profiles.lan.openPorts, [
+        '127.0.0.1:17003:7000',
+        '0.0.0.0:8081:8081',
+        '127.0.0.1:18083:18083',
+    ]);
+    for (const [profileName, profile] of Object.entries(manifest.profiles)) {
+        assert.equal(profile.openPorts[0], '127.0.0.1:17003:7000', `${profileName} MCP route must target AgentServer`);
+        assert.equal(profile.openPorts.includes('127.0.0.1:8081:8081') || profile.openPorts.includes('0.0.0.0:8081:8081'), true, `${profileName} must preserve the nginx data-plane publish`);
+        assert.equal(profile.openPorts.some((entry) => entry.endsWith(':7000') && !entry.startsWith('127.0.0.1:')), false, `${profileName} must never expose AgentServer beyond loopback`);
+    }
     for (const profile of Object.values(manifest.profiles)) {
         for (const field of forbiddenFields) {
             assert.equal(Object.hasOwn(profile, field), false, `profile ${field} must be absent`);
         }
     }
+});
+
+test('web-publishing data volume is writable by uid 999 without Podman host chown', () => {
+    const manifest = readManifest();
+
+    assert.deepEqual(manifest.profiles.default.volumes, {
+        '.ploinky/data/web-publishing': '/data',
+    });
+    assert.deepEqual(manifest.volumeOptions?.['/data'], {
+        chmod: 0o1777,
+        podmanChown: false,
+    });
 });
 
 test('web-publishing manifest uses the scoped tunnel token only', () => {
@@ -87,7 +110,12 @@ test('web-publishing manifest uses the scoped tunnel token only', () => {
 
     const serialized = JSON.stringify(manifest);
     assert.doesNotMatch(serialized, /"CLOUDFLARED_TUNNEL_TOKEN"/);
-    assert.equal(Object.hasOwn(defaultEnv, 'WEB_PUBLISHING_CERT_EMAIL'), true);
+    assert.equal(Object.hasOwn(defaultEnv, 'WEB_PUBLISHING_CERT_EMAIL'), false);
+    assert.deepEqual(defaultEnv.WEB_PUBLISHING_TLS_EDGE, { required: false });
+    assert.equal(Object.hasOwn(defaultEnv, 'WEB_PUBLISHING_LIVEKIT_MEDIA_IP'), true);
+    assert.equal(Object.hasOwn(defaultEnv, 'WEB_PUBLISHING_TURN_EXTERNAL_IP'), true);
+    assert.deepEqual(defaultEnv.WEB_PUBLISHING_EXTERNAL_PROXY_CIDRS, { required: false });
+    assert.equal(Object.hasOwn(defaultEnv, 'WEB_PUBLISHING_PUBLIC_HOST'), false);
     assert.equal(Object.hasOwn(defaultEnv, 'WEBMEET_CERT_EMAIL'), false);
     assert.equal(defaultEnv.WEB_PUBLISHING_SECRET_STATE_FILE?.default, '/data/secret-state.json');
     assert.match(serialized, /WEB_PUBLISHING_CLOUDFLARED_TUNNEL_TOKEN/);
@@ -106,6 +134,10 @@ test('web-publishing provider output allowlist is exact and excludes generated s
         'WEBMEET_LIVEKIT_API_KEY',
         'WEBMEET_LIVEKIT_API_SECRET',
         'WEBMEET_TURN_PASSWORD',
+        'WEBMEET_TURN_REALM',
+        'WEBMEET_TLS_HOSTNAME',
+        'WEBMEET_CERT_EMAIL',
+        'WEBMEET_LIVEKIT_UPSTREAM',
         'PLOINKY_WEBMEET_MASTER_KEY',
         'ONLYOFFICE_JWT_SECRET',
         'JWT_SECRET',
@@ -137,5 +169,48 @@ test('web-publishing MCP tools are admin-only', () => {
         assert.deepEqual(tool.args, ['tools/web-publishing-tool.mjs']);
         assert.equal(tool.cwd, '/code');
         assert.equal(tool.tags.includes('internal'), false);
+        assert.equal(
+            Object.hasOwn(tool.inputSchema || {}, 'additionalProperties'),
+            false,
+            `${tool.name} must not advertise the DSL control key as a tool argument`,
+        );
     }
+
+    const configTools = tools.filter((tool) => tool.inputSchema?.config);
+    const expectedConfigFields = [
+        'mode',
+        'tlsEdge',
+        'baseDomain',
+        'publicUrl',
+        'livekitMediaIp',
+        'turnExternalIp',
+        'tunnel',
+        'exposures',
+    ];
+    for (const tool of configTools) {
+        assert.deepEqual(
+            Object.keys(tool.inputSchema.config.properties || {}),
+            expectedConfigFields,
+            `${tool.name} must advertise every nested config field to AgentServer`,
+        );
+        assert.equal(tool.inputSchema.config.additionalProperties, false);
+        assert.deepEqual(
+            Object.keys(tool.inputSchema.config.properties.tunnel.properties),
+            ['source', 'tokenSet', 'tunnelId', 'tunnelName'],
+        );
+        assert.deepEqual(
+            Object.keys(tool.inputSchema.config.properties.exposures.items.properties),
+            ['id', 'enabled', 'hostname', 'path', 'originId', 'service', 'description'],
+        );
+        assert.equal(tool.inputSchema.config.properties.exposures.items.additionalProperties, false);
+    }
+    const applyTool = tools.find((tool) => tool.name === 'web_publishing_config_apply');
+    assert.notEqual(applyTool.inputSchema.config.optional, true, 'config_apply requires its nested config object');
+    const tunnelApplyTool = tools.find((tool) => tool.name === 'web_publishing_cloudflare_tunnel_apply');
+    assert.equal(tunnelApplyTool.inputSchema.provisionOnly, undefined);
+    assert.doesNotMatch(
+        JSON.stringify(configTools.map((tool) => tool.inputSchema.config)),
+        /lanHost|listenPort|externalProxyCidrs/,
+        'fixed listeners and deployment-owned proxy trust must not be advertised as mutable draft fields',
+    );
 });

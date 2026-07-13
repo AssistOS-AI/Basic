@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 import {
     buildCloudflaredIngress,
+    mergePublishingConfig,
     normalizePublishingConfig,
+    buildTurnDnsRecord,
 } from '../lib/routes.mjs';
-import { renderNginxConfig } from '../lib/nginx-config.mjs';
+import {
+    readRuntimeDnsResolvers,
+    renderNginxConfig,
+} from '../lib/nginx-config.mjs';
 import {
     createTunnel,
     describeCloudflareConfig,
@@ -21,7 +26,9 @@ import {
     writeConfig,
     writeSecretState,
     writeStatus,
+    withOperationLock,
 } from '../runtime/status-store.mjs';
+import { runtimeConfigFingerprint } from '../runtime/config-fingerprint.mjs';
 
 async function readStdin() {
     if (process.stdin.isTTY) return '';
@@ -47,8 +54,20 @@ function parsePayload(raw) {
 }
 
 async function currentConfig(inputConfig = null) {
-    const saved = inputConfig || await readConfig();
-    return normalizePublishingConfig(saved, process.env);
+    if (inputConfig) {
+        return normalizePublishingConfig(inputConfig, process.env);
+    }
+    const [saved, secretState] = await Promise.all([readConfig(), readSecretState()]);
+    return normalizePublishingConfig(
+        mergePublishingConfig(saved, process.env, secretState),
+        process.env,
+    );
+}
+
+function requireCloudflarePublishingConfig(config) {
+    if (!String(config?.mode || '').includes('cloudflare') || config?.tlsEdge !== 'cloudflare') {
+        throw new Error('Cloudflare tunnel operations require a Cloudflare publishing mode and WEB_PUBLISHING_TLS_EDGE=cloudflare.');
+    }
 }
 
 async function status() {
@@ -61,6 +80,7 @@ async function status() {
         secrets: redactSecretState(secretState),
         cloudflare: describeCloudflareConfig(),
         ingress: buildCloudflaredIngress(config.exposures),
+        turnDnsRecord: buildTurnDnsRecord(config),
     };
 }
 
@@ -74,20 +94,39 @@ async function configGet() {
 
 async function configValidate(input) {
     const config = await currentConfig(input.config || {});
+    const dnsResolvers = await readRuntimeDnsResolvers();
     return {
         ok: true,
         config: redactConfig(config),
         ingress: buildCloudflaredIngress(config.exposures),
-        nginxConfig: renderNginxConfig(config.exposures),
+        nginxConfig: renderNginxConfig(config.exposures, {
+            dnsResolvers,
+            tlsEdge: config.tlsEdge,
+            externalProxyCidrs: config.externalProxyCidrs,
+        }),
+        turnDnsRecord: buildTurnDnsRecord(config),
     };
 }
 
-async function configApply(input) {
+async function configApplyUnlocked(input) {
     const config = await currentConfig(input.config || {});
+    const activeStatus = await readStatus();
+    const configFingerprint = runtimeConfigFingerprint(config);
     const saved = await writeConfig(config);
-    await writeStatus({ state: 'config-applied', mode: config.mode });
+    const applied = (activeStatus.state === 'running' || activeStatus.state === 'awaiting-provision')
+        && activeStatus.activeConfigFingerprint === configFingerprint;
+    if (!applied) {
+        await writeStatus({
+            state: 'restart-required',
+            mode: config.mode,
+            requestedConfigFingerprint: configFingerprint,
+        });
+    }
     return {
         ok: true,
+        persisted: true,
+        applied,
+        restartRequired: !applied,
         config: redactConfig(saved),
         ingress: buildCloudflaredIngress(config.exposures),
     };
@@ -95,25 +134,75 @@ async function configApply(input) {
 
 async function tunnelPlan(input) {
     const config = await currentConfig(input.config || null);
+    requireCloudflarePublishingConfig(config);
+    const turnDnsRecord = buildTurnDnsRecord(config);
     return {
         ok: true,
         plan: planTunnelChanges({
+            tunnelId: config.tunnel?.tunnelId,
             tunnelName: config.tunnel?.tunnelName,
             ingress: buildCloudflaredIngress(config.exposures),
             createDnsRecords: input.createDnsRecords === true,
+            turnDnsRecord,
         }),
     };
 }
 
-async function tunnelApply(input) {
+async function tunnelApplyUnlocked(input) {
     const config = await currentConfig(input.config || null);
+    requireCloudflarePublishingConfig(config);
     const ingress = buildCloudflaredIngress(config.exposures);
+    const turnDnsRecord = buildTurnDnsRecord(config);
     const createDnsRecords = input.createDnsRecords === true;
-    if (createDnsRecords) {
-        await preflightDnsRecordAccess(config.exposures);
+    const activeStatus = await readStatus();
+    const configFingerprint = runtimeConfigFingerprint(config);
+    const cloudflaredState = activeStatus.cloudflared?.state;
+    const activeFingerprintMatches = activeStatus.activeConfigFingerprint === configFingerprint
+        && activeStatus.nginx?.state === 'running'
+        && ((activeStatus.state === 'running' && cloudflaredState === 'running')
+            || (activeStatus.state === 'awaiting-provision' && cloudflaredState === 'awaiting-provision'));
+    if (!activeFingerprintMatches) {
+        return {
+            ok: false,
+            applied: false,
+            remoteApplied: false,
+            restartRequired: true,
+            error: 'Restart Web Publishing and verify its active configuration and required child processes before any Cloudflare operation.',
+            config: redactConfig(config),
+            ingress,
+        };
     }
-    let tunnelId = config.tunnel?.tunnelId || process.env.WEB_PUBLISHING_CLOUDFLARE_TUNNEL_ID || '';
-    let tunnelName = config.tunnel?.tunnelName || process.env.WEB_PUBLISHING_CLOUDFLARE_TUNNEL_NAME || '';
+
+    const secretState = await readSecretState();
+    let tunnelId = config.tunnel?.tunnelId
+        || process.env.WEB_PUBLISHING_CLOUDFLARE_TUNNEL_ID
+        || secretState.tunnelId
+        || '';
+    let tunnelName = config.tunnel?.tunnelName
+        || process.env.WEB_PUBLISHING_CLOUDFLARE_TUNNEL_NAME
+        || secretState.tunnelName
+        || '';
+    const requestedTunnelId = config.tunnel?.tunnelId || '';
+    const requestedTunnelName = config.tunnel?.tunnelName || '';
+    if (
+        (tunnelId && tunnelId !== requestedTunnelId)
+        || (tunnelName && tunnelName !== requestedTunnelName)
+    ) {
+        await writeStatus({
+            state: 'restart-required',
+            mode: config.mode,
+            requestedConfigFingerprint: configFingerprint,
+        });
+        return {
+            ok: false,
+            applied: false,
+            remoteApplied: false,
+            restartRequired: true,
+            error: 'Resolved Cloudflare tunnel identity differs from the supervised connector; restart Web Publishing before any remote operation.',
+            config: redactConfig(config),
+            ingress,
+        };
+    }
     let tunnel = null;
     if (!tunnelId) {
         tunnel = await createTunnel(config.tunnel?.tunnelName || 'ploinky-web-publishing');
@@ -125,6 +214,13 @@ async function tunnelApply(input) {
             tunnelName,
         });
     }
+    const tokenSet = Boolean(
+        config.tunnel?.tokenSet
+        || process.env.WEB_PUBLISHING_CLOUDFLARED_TUNNEL_TOKEN
+        || process.env.TUNNEL_TOKEN
+        || secretState.tunnelToken
+        || tunnel?.tokenSet
+    );
     const cloudflareEnv = {
         ...process.env,
         WEB_PUBLISHING_CLOUDFLARE_TUNNEL_ID: tunnelId,
@@ -135,23 +231,81 @@ async function tunnelApply(input) {
         tunnel: {
             ...(config.tunnel || {}),
             source: tunnel ? 'cloudflare-api' : (config.tunnel?.source || 'cloudflare-api'),
-            tokenSet: Boolean(config.tunnel?.tokenSet || tunnel?.tokenSet),
+            tokenSet,
             tunnelId,
             tunnelName,
         },
     });
+    if (tunnel) {
+        await writeStatus({
+            state: 'restart-required',
+            mode: config.mode,
+            requestedConfigFingerprint: configFingerprint,
+            cloudflare: {
+                tunnelId,
+                tunnelName,
+                tokenCreated: Boolean(tunnel?.tokenSet),
+                ingressApplied: false,
+            },
+        });
+        return {
+            ok: true,
+            persisted: true,
+            applied: false,
+            remoteApplied: false,
+            restartRequired: true,
+            tunnelProvisioned: Boolean(tunnel),
+            config: redactConfig(savedConfig, cloudflareEnv),
+            ingress,
+            dns: [],
+            cloudflareResult: null,
+            tunnel: tunnel ? {
+                tunnelId: tunnel.tunnelId,
+                tunnelName: tunnel.tunnelName,
+                tokenSet: tunnel.tokenSet,
+            } : null,
+        };
+    }
+
+    if (activeStatus.state !== 'running' || cloudflaredState !== 'running') {
+        await writeStatus({
+            state: 'restart-required',
+            mode: config.mode,
+            requestedConfigFingerprint: configFingerprint,
+        });
+        return {
+            ok: false,
+            persisted: true,
+            applied: false,
+            remoteApplied: false,
+            restartRequired: true,
+            error: 'Restart Web Publishing so its required Cloudflared connector is running before applying remote ingress.',
+            config: redactConfig(savedConfig, cloudflareEnv),
+            ingress,
+        };
+    }
+    if (createDnsRecords) {
+        await preflightDnsRecordAccess(config.exposures, { turnDnsRecord });
+    }
     const cloudflareResult = await putTunnelIngress(ingress, { env: cloudflareEnv });
-    const dns = createDnsRecords ? await upsertDnsRecords(config.exposures, { env: cloudflareEnv }) : [];
+    const dns = createDnsRecords
+        ? await upsertDnsRecords(config.exposures, { env: cloudflareEnv, turnDnsRecord })
+        : [];
     await writeStatus({
-        state: 'cloudflare-applied',
+        lastOperation: 'cloudflare-applied',
         cloudflare: {
             tunnelId,
             tunnelName,
             tokenCreated: Boolean(tunnel?.tokenSet),
+            ingressApplied: true,
         },
     });
     return {
         ok: true,
+        persisted: true,
+        applied: true,
+        remoteApplied: true,
+        restartRequired: false,
         config: redactConfig(savedConfig, cloudflareEnv),
         ingress,
         dns,
@@ -162,6 +316,14 @@ async function tunnelApply(input) {
             tokenSet: tunnel.tokenSet,
         } : null,
     };
+}
+
+async function configApply(input) {
+    return withOperationLock(() => configApplyUnlocked(input));
+}
+
+async function tunnelApply(input) {
+    return withOperationLock(() => tunnelApplyUnlocked(input));
 }
 
 export async function main() {

@@ -59,11 +59,13 @@ dashboard must call the router-mediated `/cloudflared/mcp` endpoint and must use
 the existing admin MCP tools rather than adding direct HTTP service exposure or
 Explorer-owned Cloudflare logic.
 
-The default Cloudflare published-application route for Ploinky box must target
-the Ploinky router from the connector container's point of view:
-`http://host.containers.internal:8080`. Operators must not configure that route
-as `localhost:8080`, because `localhost` inside the connector means the
-`cloudflared` container itself.
+The manifest must declare exactly `network.mode = default`, without aliases or
+secondary attachments. Ploinky gives the resulting agent-owned network a
+managed gateway attachment with the `ploinky-router` alias. The one supported
+Cloudflare published-application origin is therefore exactly
+`http://ploinky-router:8080`. The agent must reject configurable origin
+presets, host-gateway names, loopback targets, alternate router ports, and
+sibling-agent origins. It must not attach WebMeet or office networks.
 
 The `cloudflared` agent must not declare `routerAccess`, `httpServices`,
 `guest`, `ssoProvider`, `ports`, or `openPorts`. It does not own Ploinky
@@ -73,8 +75,7 @@ router-hosted HTTP and WebSocket traffic.
 
 This catalog contract does not define a general TCP or UDP exposure mechanism.
 Direct media or data-plane surfaces such as LiveKit media, TURN, and OnlyOffice
-editor ports remain explicit Ploinky box publication responsibilities through
-`--publish` or `--webmeet-ports`, with their own credentials and specs. The
+editor ports remain outside this connector's network and origin contract. The
 Ploinky router remains the public control-plane entrypoint for agent
 application surfaces such as MCP, task status, chat completions, internal
 callbacks, and storage endpoints.
@@ -86,7 +87,7 @@ callbacks, and storage endpoints.
 Response: Ploinky's router owns authentication, policy, route prefixing, MCP
 proxying, task status, and public HTTP service decisions. Tunneling arbitrary
 agent ports would bypass that boundary. The connector therefore documents the
-router target `http://host.containers.internal:8080` as the supported HTTP and
+router target `http://ploinky-router:8080` as the supported HTTP and
 WebSocket origin for Cloudflare published applications.
 
 ### Question #2: Why is readiness MCP-based?
