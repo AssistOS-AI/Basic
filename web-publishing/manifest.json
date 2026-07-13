@@ -1,5 +1,5 @@
 {
-  "container": "docker.io/assistos/web-publishing-agent:node24-nginx-cloudflared",
+  "container": "docker.io/assistos/web-publishing-agent:node24-nginx-cloudflared@sha256:f0f83dc406bc0434ccbeac48dc826cdb8c527a637a5bf1b5ddf915110d24c477",
   "about": "Web Publishing owns Explorer public topology, nginx route rendering, optional Cloudflare Tunnel operation, and an admin settings surface without exposing a public dashboard route.",
   "start": "node /code/runtime/supervisor.mjs",
   "agent": "node /code/runtime/wait-for-nginx.mjs && sh /Agent/server/AgentServer.sh",

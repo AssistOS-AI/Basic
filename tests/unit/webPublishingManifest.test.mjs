@@ -40,7 +40,10 @@ function readManifest() {
 test('web-publishing manifest declares the custom nginx and cloudflared image', () => {
     const manifest = readManifest();
 
-    assert.equal(manifest.container, 'docker.io/assistos/web-publishing-agent:node24-nginx-cloudflared');
+    assert.equal(
+        manifest.container,
+        'docker.io/assistos/web-publishing-agent:node24-nginx-cloudflared@sha256:f0f83dc406bc0434ccbeac48dc826cdb8c527a637a5bf1b5ddf915110d24c477',
+    );
     assert.equal(manifest.start, 'node /code/runtime/supervisor.mjs');
     assert.equal(manifest.agent, 'node /code/runtime/wait-for-nginx.mjs && sh /Agent/server/AgentServer.sh');
     assert.equal(manifest.readiness?.protocol, 'mcp');
