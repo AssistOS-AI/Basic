@@ -34,9 +34,7 @@
   },
   "profiles": {
     "default": {
-      "openPorts": [
-        "127.0.0.1:7681:7681"
-      ],
+      "additionalServerPort": "7681",
       "mounts": {
         "code": "ro"
       },

@@ -13,10 +13,11 @@ function readWebttyManifest() {
     return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 }
 
-test('webtty publishes its browser server through openPorts', () => {
+test('webtty keeps its browser server private while preserving router and readiness access', () => {
     const manifest = readWebttyManifest();
     const defaultProfile = manifest.profiles?.default || {};
 
-    assert.deepEqual(defaultProfile.openPorts, ['127.0.0.1:7681:7681']);
+    assert.equal(defaultProfile.additionalServerPort, '7681');
+    assert.equal(Object.hasOwn(defaultProfile, 'openPorts'), false);
     assert.equal(Object.hasOwn(defaultProfile, 'ports'), false);
 });
