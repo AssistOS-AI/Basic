@@ -1,5 +1,52 @@
+const WEB_PUBLISHING_MCP_PATH = '/web-publishing/mcp';
+
 function text(value) {
     return typeof value === 'string' ? value.trim() : '';
+}
+
+function scopedDocument(element) {
+    return {
+        getElementById(id) {
+            return element?.querySelector?.(`#${id}`) || null;
+        },
+    };
+}
+
+export class WebPublishingSettings {
+    constructor(element, invalidate) {
+        this.element = element;
+        this.invalidate = invalidate;
+        this.documentRef = scopedDocument(element);
+        this.bound = false;
+        this.invalidate?.();
+    }
+
+    beforeRender() {}
+
+    afterRender() {
+        this.bindEvents();
+        refreshPublishingState({ documentRef: this.documentRef })
+            .catch((error) => setStatus(error?.message || 'Refresh failed', this.documentRef));
+    }
+
+    bindEvents() {
+        if (this.bound) {
+            return;
+        }
+        this.bound = true;
+        this.documentRef.getElementById('webPublishingRefresh')?.addEventListener('click', () => {
+            refreshPublishingState({ documentRef: this.documentRef })
+                .catch((error) => setStatus(error?.message || 'Refresh failed', this.documentRef));
+        });
+        this.documentRef.getElementById('webPublishingValidate')?.addEventListener('click', () => {
+            validatePublishingConfig({ documentRef: this.documentRef })
+                .catch((error) => setStatus(error?.message || 'Validation failed', this.documentRef));
+        });
+        this.documentRef.getElementById('webPublishingApply')?.addEventListener('click', () => {
+            applyPublishingConfig({ documentRef: this.documentRef })
+                .catch((error) => setStatus(error?.message || 'Apply failed', this.documentRef));
+        });
+    }
 }
 
 export function normalizeExposureDrafts(drafts = []) {
@@ -95,11 +142,17 @@ export function updateStateIndicators(result = {}, documentRef = document) {
 }
 
 async function callMcp(tool, input = {}) {
-    if (!window.AssistOS?.callTool) {
+    const mcpClientFactory = await import('/MCPBrowserClient.js').catch(() => null);
+    if (mcpClientFactory && typeof mcpClientFactory.createAgentClient === 'function') {
+        const client = mcpClientFactory.createAgentClient(WEB_PUBLISHING_MCP_PATH);
+        return parseWebPublishingToolPayload(await client.callTool(tool, input));
+    }
+    const win = typeof window === 'undefined' ? null : window;
+    if (!win?.AssistOS?.callTool) {
         setStatus('MCP bridge unavailable');
         return { ok: false };
     }
-    const response = await window.AssistOS.callTool(tool, input);
+    const response = await win.AssistOS.callTool(tool, input);
     return parseWebPublishingToolPayload(response);
 }
 
@@ -184,7 +237,13 @@ export async function applyPublishingConfig({
 }
 
 if (typeof document !== 'undefined') {
-    document.getElementById('webPublishingRefresh')?.addEventListener('click', () => refreshPublishingState());
-    document.getElementById('webPublishingValidate')?.addEventListener('click', () => validatePublishingConfig());
-    document.getElementById('webPublishingApply')?.addEventListener('click', () => applyPublishingConfig());
+    document.getElementById('webPublishingRefresh')?.addEventListener('click', () => {
+        refreshPublishingState().catch((error) => setStatus(error?.message || 'Refresh failed'));
+    });
+    document.getElementById('webPublishingValidate')?.addEventListener('click', () => {
+        validatePublishingConfig().catch((error) => setStatus(error?.message || 'Validation failed'));
+    });
+    document.getElementById('webPublishingApply')?.addEventListener('click', () => {
+        applyPublishingConfig().catch((error) => setStatus(error?.message || 'Apply failed'));
+    });
 }

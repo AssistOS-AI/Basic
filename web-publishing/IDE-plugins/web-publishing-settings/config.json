@@ -1,6 +1,14 @@
 {
-  "name": "web-publishing-settings",
-  "label": "Web Publishing",
+  "pluginCategory": "application",
+  "id": "web-publishing-settings",
   "component": "web-publishing-settings",
-  "version": "1.0.0"
+  "location": [],
+  "label": "Web Publishing",
+  "tooltip": "Configure Web Publishing routes",
+  "presenter": "WebPublishingSettings",
+  "type": "global",
+  "autoPin": false,
+  "dependencies": [],
+  "settings": "web-publishing-settings",
+  "adminOnly": true
 }

@@ -15,6 +15,7 @@ import {
     refreshPublishingState,
     shouldCreateDnsRecords,
     updateStateIndicators,
+    WebPublishingSettings,
 } from '../../web-publishing/IDE-plugins/web-publishing-settings/web-publishing-settings.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -91,6 +92,47 @@ test('Explorer settings resolution reuses the root web-publishing dashboard comp
     for (const extension of ['html', 'css', 'js']) {
         assert.equal(fs.existsSync(`${localBase}.${extension}`), true);
     }
+});
+
+test('settings module exposes a presenter that binds modal actions once', () => {
+    const listeners = new Map();
+    const elements = new Map(
+        ['webPublishingRefresh', 'webPublishingValidate', 'webPublishingApply'].map((id) => [
+            id,
+            {
+                addEventListener(event, listener) {
+                    assert.equal(event, 'click');
+                    const existing = listeners.get(id) || [];
+                    existing.push(listener);
+                    listeners.set(id, existing);
+                },
+            },
+        ]),
+    );
+    let invalidations = 0;
+    const presenter = new WebPublishingSettings(
+        {
+            querySelector(selector) {
+                return elements.get(selector.replace(/^#/, '')) || null;
+            },
+        },
+        () => {
+            invalidations += 1;
+        },
+    );
+
+    presenter.bindEvents();
+    presenter.bindEvents();
+
+    assert.equal(invalidations, 1);
+    assert.deepEqual(
+        Object.fromEntries([...listeners].map(([id, handlers]) => [id, handlers.length])),
+        {
+            webPublishingRefresh: 1,
+            webPublishingValidate: 1,
+            webPublishingApply: 1,
+        },
+    );
 });
 
 test('DNS creation is unchecked by default and legacy token text is absent from dashboard HTML', () => {

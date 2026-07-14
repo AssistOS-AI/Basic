@@ -90,6 +90,33 @@ test('web-publishing manifest exposes only admin settings and loopback data-plan
     }
 });
 
+test('web-publishing settings plugin declares the Explorer runtime contract', () => {
+    const configPath = path.join(
+        repoRoot,
+        'web-publishing',
+        'IDE-plugins',
+        'web-publishing-settings',
+        'config.json',
+    );
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+    assert.deepEqual(config, {
+        pluginCategory: 'application',
+        id: 'web-publishing-settings',
+        component: 'web-publishing-settings',
+        location: [],
+        label: 'Web Publishing',
+        tooltip: 'Configure Web Publishing routes',
+        presenter: 'WebPublishingSettings',
+        type: 'global',
+        autoPin: false,
+        dependencies: [],
+        settings: 'web-publishing-settings',
+        adminOnly: true,
+    });
+
+});
+
 test('web-publishing data volume is writable by uid 999 without Podman host chown', () => {
     const manifest = readManifest();
 
