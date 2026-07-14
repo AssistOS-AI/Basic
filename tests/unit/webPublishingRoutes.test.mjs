@@ -77,7 +77,7 @@ test('normalizeRouteModel rejects Nginx path injection while accepting simple UR
         exposures: [{
             hostname: 'app.example.com',
             path: '/office/v1_assets/~me/%2Fdoc-1',
-            originId: 'onlyoffice',
+            originId: 'router',
         }],
     });
     assert.equal(routes[0].path, '/office/v1_assets/~me/%2Fdoc-1');
@@ -88,7 +88,7 @@ test('buildCloudflaredIngress orders path routes before host catch-all and appen
         baseDomain: 'example.com',
         exposures: [
             { hostname: 'app.example.com', originId: 'router' },
-            { hostname: 'app.example.com', path: '/office', originId: 'onlyoffice' },
+            { hostname: 'app.example.com', path: '/office', originId: 'router' },
         ],
     });
 
@@ -96,7 +96,7 @@ test('buildCloudflaredIngress orders path routes before host catch-all and appen
         {
             hostname: 'app.example.com',
             path: '/office',
-            service: 'http://onlyoffice:8080',
+            service: 'http://ploinky-router:8080',
         },
         {
             hostname: 'app.example.com',
@@ -180,15 +180,87 @@ test('fixed listener addresses are neither normalized nor fingerprinted as draft
     );
 });
 
-test('local/default topology creates a usable loopback LiveKit route without public outputs', () => {
+test('local/default topology creates usable loopback Office and LiveKit routes without public IP outputs', () => {
     const config = normalizePublishingConfig({});
     assert.deepEqual(config.exposures.map((route) => ({ hostname: route.hostname, originId: route.originId })), [
+        { hostname: 'office.localhost', originId: 'onlyoffice' },
         { hostname: '127.0.0.1', originId: 'livekit-http' },
     ]);
     const values = new Map(buildProviderValues(config).map((entry) => [entry.name, entry.value]));
+    assert.equal(values.get('ONLYOFFICE_PUBLIC_URL'), 'http://office.localhost:8081');
     assert.equal(values.get('WEBMEET_PUBLIC_LIVEKIT_URL'), 'ws://127.0.0.1:8081');
     assert.equal(values.has('WEBMEET_LIVEKIT_NODE_IP'), false);
     assert.equal(values.has('WEBMEET_TURN_EXTERNAL_IP'), false);
+});
+
+test('OnlyOffice publishing requires its canonical root hostname', () => {
+    const publicConfig = {
+        mode: 'nginx',
+        tlsEdge: 'external',
+        baseDomain: 'example.com',
+        livekitMediaIp: '203.0.113.10',
+        turnExternalIp: '198.51.100.20',
+    };
+    const publicEnv = {
+        WEB_PUBLISHING_EXTERNAL_PROXY_CIDRS: '10.89.0.1/32',
+    };
+    const livekit = {
+        hostname: 'meet.example.com',
+        originId: 'livekit-http',
+    };
+
+    for (const office of [
+        { hostname: 'app.example.com', originId: 'onlyoffice' },
+        { hostname: 'office.example.com', path: '/office', originId: 'onlyoffice' },
+    ]) {
+        assert.throws(
+            () => normalizePublishingConfig({
+                ...publicConfig,
+                exposures: [office, livekit],
+            }, publicEnv),
+            /canonical office\.example\.com root route/,
+        );
+    }
+
+    const canonical = normalizePublishingConfig({
+        ...publicConfig,
+        exposures: [
+            { hostname: 'office.example.com', path: '/', originId: 'onlyoffice' },
+            livekit,
+        ],
+    }, publicEnv);
+    assert.equal(
+        canonical.exposures.find((route) => route.originId === 'onlyoffice')?.path,
+        '',
+    );
+
+    assert.throws(
+        () => normalizePublishingConfig({
+            exposures: [
+                { hostname: 'office.localhost', path: '/office', originId: 'onlyoffice' },
+                { hostname: '127.0.0.1', originId: 'livekit-http' },
+            ],
+        }),
+        /canonical office\.localhost root route/,
+    );
+});
+
+test('local normalization upgrades persisted LiveKit-only topology with the canonical Office route', () => {
+    const config = normalizePublishingConfig({
+        exposures: [{
+            id: 'livekit-local',
+            enabled: true,
+            hostname: '127.0.0.1',
+            originId: 'livekit-http',
+        }],
+    });
+
+    assert.deepEqual(config.exposures.map((route) => ({ hostname: route.hostname, originId: route.originId })), [
+        { hostname: 'office.localhost', originId: 'onlyoffice' },
+        { hostname: '127.0.0.1', originId: 'livekit-http' },
+    ]);
+    const values = new Map(buildProviderValues(config).map((entry) => [entry.name, entry.value]));
+    assert.equal(values.get('ONLYOFFICE_PUBLIC_URL'), 'http://office.localhost:8081');
 });
 
 test('managed origins use only the router gateway and canonical agent DNS names', () => {

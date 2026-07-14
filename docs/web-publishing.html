@@ -123,10 +123,15 @@ flowchart LR
                 and <code>WEBMEET_TURN_ALLOWED_PEER_IPS</code> is the media IP
                 as one <code>/32</code>. Coturn derives its realm from the TURN
                 hostname; Web Publishing does not emit a separate realm value.
-                Local mode explicitly emits
-                <code>WEBMEET_TURN_HOST=127.0.0.1</code> so an old public TURN
-                hostname is replaced rather than left in Ploinky's provider
-                state.
+                Local mode serves the editor through the same loopback Nginx
+                listener and explicitly emits
+                <code>ONLYOFFICE_PUBLIC_URL=http://office.localhost:8081</code>
+                plus <code>WEBMEET_TURN_HOST=127.0.0.1</code> so retired direct
+                Office ports and old public TURN hostnames are replaced rather
+                than left in Ploinky's provider state. Ordinary HTTP routes
+                preserve the incoming host and non-default port in
+                <code>X-Forwarded-Host</code>, which keeps Document Server's
+                browser-generated URLs reachable.
                 The scoped tunnel token variable is
                 <code>WEB_PUBLISHING_CLOUDFLARED_TUNNEL_TOKEN</code> and is
                 treated as sensitive when it is already present in the

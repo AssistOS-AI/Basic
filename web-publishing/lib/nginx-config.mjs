@@ -63,16 +63,21 @@ export async function readRuntimeDnsResolvers({
 }
 
 function renderProxyLocation(locationPath, service) {
+    const upstream = new URL(service);
+    const runtimeDns = isIP(upstream.hostname) === 0;
+    const proxyTarget = runtimeDns
+        ? `${upstream.protocol}//$web_publishing_upstream_host:${upstream.port}`
+        : service;
     return `    location ${escapeNginx(locationPath)} {
         proxy_http_version 1.1;
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Host $http_host;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_read_timeout 3600s;
-        proxy_pass ${service};
+${runtimeDns ? `        set $web_publishing_upstream_host ${upstream.hostname};\n` : ''}        proxy_pass ${proxyTarget};
     }`;
 }
 
@@ -182,10 +187,13 @@ export function renderNginxConfig(routes = [], {
 
     // Fail-closed default: a request whose Host header does not match any configured
     // hostname below must 404, not silently fall through to nginx's first server block.
-    const hasLiveKitRoute = normalizedEnabledRoutes.some((route) => route.originId === LIVEKIT_SIGNALING_ORIGIN_ID);
+    const hasRuntimeDnsRoute = normalizedEnabledRoutes.some((route) => (
+        route.originId === LIVEKIT_SIGNALING_ORIGIN_ID
+        || isIP(new URL(route.service).hostname) === 0
+    ));
     const normalizedResolvers = normalizeDnsResolvers(dnsResolvers);
-    if (hasLiveKitRoute && !normalizedResolvers.length) {
-        throw new Error('At least one runtime DNS resolver is required for LiveKit signaling.');
+    if (hasRuntimeDnsRoute && !normalizedResolvers.length) {
+        throw new Error('At least one runtime DNS resolver is required for private service aliases.');
     }
     const serverBlocks = [`server {
     listen 8081 default_server;
@@ -282,7 +290,7 @@ http {
         default 0;
 ${normalizedExternalProxyCidrs.map((cidr) => `        ${cidr} 1;`).join('\n')}
     }` : ''}
-    ${hasLiveKitRoute ? `resolver ${normalizedResolvers.join(' ')} valid=10s ipv6=off;\n    resolver_timeout 2s;` : ''}
+    ${hasRuntimeDnsRoute ? `resolver ${normalizedResolvers.join(' ')} valid=10s ipv6=off;\n    resolver_timeout 2s;` : ''}
 
 ${serverBlocks.join('\n\n')}
 }

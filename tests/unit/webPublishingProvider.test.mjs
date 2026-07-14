@@ -92,6 +92,7 @@ test('local provider output explicitly clears a stale public TURN hostname', asy
     });
     const byName = new Map(response.values.map((entry) => [entry.name, entry.value]));
 
+    assert.equal(byName.get('ONLYOFFICE_PUBLIC_URL'), 'http://office.localhost:8081');
     assert.equal(byName.get('WEBMEET_PUBLIC_LIVEKIT_URL'), 'ws://127.0.0.1:8081');
     assert.equal(byName.get('WEBMEET_TURN_HOST'), '127.0.0.1');
     assert.equal(byName.has('WEBMEET_TURN_EXTERNAL_IP'), false);

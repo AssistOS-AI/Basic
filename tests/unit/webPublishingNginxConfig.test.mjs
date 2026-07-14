@@ -5,9 +5,51 @@ import {
     parseRuntimeDnsResolvers,
     renderNginxConfig,
 } from '../../web-publishing/lib/nginx-config.mjs';
-import { normalizeRouteModel } from '../../web-publishing/lib/routes.mjs';
+import {
+    normalizePublishingConfig,
+    normalizeRouteModel,
+} from '../../web-publishing/lib/routes.mjs';
 
 const EXTERNAL_PROXY_CIDRS = ['10.89.0.1/32'];
+
+test('local OnlyOffice route preserves the browser-visible port in forwarded headers', () => {
+    const config = normalizePublishingConfig({});
+    const { routes } = normalizeRouteModel(config);
+    const rendered = renderNginxConfig(routes, {
+        dnsResolvers: ['127.0.0.11'],
+    });
+    const officeBlock = rendered.split('server {').find((block) => (
+        block.includes('listen 8081;') && block.includes('server_name office.localhost;')
+    ));
+
+    assert.ok(officeBlock);
+    assert.match(officeBlock, /proxy_set_header Host \$host;/);
+    assert.match(officeBlock, /proxy_set_header X-Forwarded-Host \$http_host;/);
+    assert.match(officeBlock, /proxy_set_header X-Forwarded-Proto \$scheme;/);
+    assert.match(officeBlock, /set \$web_publishing_upstream_host onlyoffice;/);
+    assert.match(officeBlock, /proxy_pass http:\/\/\$web_publishing_upstream_host:8080;/);
+    assert.doesNotMatch(officeBlock, /proxy_pass http:\/\/onlyoffice:8080;/);
+});
+
+test('private HTTP aliases are resolved at request time instead of during nginx validation', () => {
+    const routes = [{
+        hostname: 'office.localhost',
+        path: '',
+        service: 'http://onlyoffice:8080',
+        originId: 'onlyoffice',
+        enabled: true,
+    }];
+
+    assert.throws(
+        () => renderNginxConfig(routes),
+        /runtime DNS resolver is required for private service aliases/,
+    );
+    const rendered = renderNginxConfig(routes, { dnsResolvers: ['127.0.0.11'] });
+    assert.match(rendered, /resolver 127\.0\.0\.11 valid=10s ipv6=off;/);
+    assert.match(rendered, /set \$web_publishing_upstream_host onlyoffice;/);
+    assert.match(rendered, /proxy_pass http:\/\/\$web_publishing_upstream_host:8080;/);
+    assert.doesNotMatch(rendered, /proxy_pass http:\/\/onlyoffice:8080;/);
+});
 
 test('renderNginxConfig scopes hardened LiveKit signaling to /rtc and its slash-delimited subtree', () => {
     const { routes } = normalizeRouteModel({
@@ -146,12 +188,12 @@ test('external TLS rejects broad or missing proxy trust and keeps sibling peers 
     assert.doesNotMatch(rendered, /10\.89\.0\.2/);
 });
 
-test('renderNginxConfig requires validated runtime resolvers instead of resolving the alias during nginx -t', () => {
+test('renderNginxConfig requires validated runtime resolvers instead of resolving aliases during nginx -t', () => {
     const { routes } = normalizeRouteModel({
         baseDomain: 'example.com',
         exposures: [{ hostname: 'meet.example.com', originId: 'livekit-http' }],
     });
-    assert.throws(() => renderNginxConfig(routes), /runtime DNS resolver is required/);
+    assert.throws(() => renderNginxConfig(routes), /runtime DNS resolver is required for private service aliases/);
     assert.throws(
         () => renderNginxConfig(routes, { dnsResolvers: ['resolver; injection'] }),
         /Invalid runtime DNS resolver/,
@@ -249,10 +291,12 @@ test('renderNginxConfig accepts canonical DNS and IPv4 hostnames', () => {
             originId: 'router',
             enabled: true,
         },
-    ]);
+    ], { dnsResolvers: ['127.0.0.11'] });
 
     assert.match(rendered, /server_name app\.example\.com;/);
     assert.match(rendered, /server_name 127\.0\.0\.1;/);
+    assert.match(rendered, /set \$web_publishing_upstream_host ploinky-router;/);
+    assert.doesNotMatch(rendered, /proxy_pass http:\/\/ploinky-router:8080;/);
 });
 
 test('renderNginxConfig preserves the exclusive LiveKit hostname boundary when called directly', () => {

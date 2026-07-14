@@ -90,7 +90,7 @@ test('deployment env overrides stale saved topology consistently in provider and
     assert.equal(providerValues.get('WEBMEET_TURN_EXTERNAL_IP'), runtimeConfig.turnExternalIp);
 });
 
-test('same-domain upgrades recompute persisted derived origin services', async (t) => {
+test('same-domain upgrades restore canonical Office routing and recompute derived origin services', async (t) => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'web-publishing-origin-migration-'));
     t.after(() => fs.rm(tempDir, { recursive: true, force: true }));
     const configFile = path.join(tempDir, 'config.json');
@@ -129,8 +129,11 @@ test('same-domain upgrades recompute persisted derived origin services', async (
     const provider = await buildProviderResponse(env, { readConfig: readSavedConfig });
     const providerValues = new Map(provider.values.map((entry) => [entry.name, entry.value]));
 
-    assert.equal(runtimeConfig.exposures.length, 1);
-    assert.equal(runtimeConfig.exposures[0].service, 'http://livekitserveragent:7880');
+    const routesByOrigin = new Map(runtimeConfig.exposures.map((entry) => [entry.originId, entry]));
+    assert.equal(runtimeConfig.exposures.length, 2);
+    assert.equal(routesByOrigin.get('onlyoffice')?.service, 'http://onlyoffice:8080');
+    assert.equal(routesByOrigin.get('livekit-http')?.service, 'http://livekitserveragent:7880');
+    assert.equal(providerValues.get('ONLYOFFICE_PUBLIC_URL'), 'https://office.example.com');
     assert.equal(providerValues.get('WEBMEET_LIVEKIT_URL'), 'http://livekitserveragent:7880');
     assert.equal(providerValues.get('WEBMEET_PUBLIC_LIVEKIT_URL'), 'wss://meet.example.com');
 });

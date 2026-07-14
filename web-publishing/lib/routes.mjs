@@ -152,6 +152,7 @@ export function normalizePathPattern(value) {
         throw new Error('Exposure path must not contain leading or trailing whitespace.');
     }
     const withSlash = raw.startsWith('/') ? raw : `/${raw}`;
+    if (withSlash === '/') return '';
     if (/[\u0000-\u001f]/.test(withSlash)) {
         throw new Error('Exposure path contains control characters.');
     }
@@ -199,14 +200,24 @@ export function normalizeService(value) {
 
 export function defaultExposuresForDomain(baseDomain) {
     if (!baseDomain) {
-        return [{
-            id: 'livekit-local',
-            enabled: true,
-            hostname: '127.0.0.1',
-            path: '',
-            originId: 'livekit-http',
-            description: 'Local LiveKit signaling through the loopback-only nginx listener.',
-        }];
+        return [
+            {
+                id: 'onlyoffice-local',
+                enabled: true,
+                hostname: 'office.localhost',
+                path: '',
+                originId: 'onlyoffice',
+                description: 'Local OnlyOffice editor through the loopback-only nginx listener.',
+            },
+            {
+                id: 'livekit-local',
+                enabled: true,
+                hostname: '127.0.0.1',
+                path: '',
+                originId: 'livekit-http',
+                description: 'Local LiveKit signaling through the loopback-only nginx listener.',
+            },
+        ];
     }
     return [
         {
@@ -262,6 +273,12 @@ export function normalizeRouteModel(input = {}) {
         if (!origin) throw new Error(`Unknown originId at exposure ${index + 1}: ${originId || '(empty)'}`);
         const hostname = normalizeHostname(entry?.hostname, { baseDomain });
         const pathPattern = normalizePathPattern(entry?.path);
+        if (originId === 'onlyoffice') {
+            const expectedHost = baseDomain ? `office.${baseDomain}` : 'office.localhost';
+            if (hostname !== expectedHost || pathPattern) {
+                throw new Error(`OnlyOffice editor exposure must use the canonical ${expectedHost} root route.`);
+            }
+        }
         if (originId === 'livekit-http' && pathPattern) {
             throw new Error('LiveKit signaling exposure must use the canonical /rtc route boundary and cannot declare a custom path.');
         }
@@ -351,6 +368,22 @@ export function mergePublishingConfig(saved = {}, env = {}, secretState = {}) {
 
 export function normalizePublishingConfig(input = {}, env = {}) {
     const baseDomain = normalizeDomain(input.baseDomain || env.WEB_PUBLISHING_BASE_DOMAIN);
+    const requestedExposures = Array.isArray(input.exposures) && input.exposures.length
+        ? input.exposures
+        : defaultExposuresForDomain(baseDomain);
+    // Older saved state could persist only the LiveKit route. Add the canonical
+    // Office route during normalization so upgrades replace the retired direct
+    // OnlyOffice host-port URL instead of retaining or omitting it.
+    const exposures = !requestedExposures.some(
+        (entry) => normalizeString(entry?.originId) === 'onlyoffice',
+    )
+        ? [
+            defaultExposuresForDomain(baseDomain).find(
+                (entry) => entry.originId === 'onlyoffice',
+            ),
+            ...requestedExposures,
+        ]
+        : requestedExposures;
     const config = {
         version: 1,
         mode: normalizeMode(input.mode || env.WEB_PUBLISHING_MODE),
@@ -378,9 +411,7 @@ export function normalizePublishingConfig(input = {}, env = {}) {
             tunnelId: normalizeString(input.tunnel?.tunnelId || env.WEB_PUBLISHING_CLOUDFLARE_TUNNEL_ID),
             tunnelName: normalizeString(input.tunnel?.tunnelName || env.WEB_PUBLISHING_CLOUDFLARE_TUNNEL_NAME),
         },
-        exposures: Array.isArray(input.exposures) && input.exposures.length
-            ? input.exposures
-            : defaultExposuresForDomain(baseDomain),
+        exposures,
     };
     const { routes } = normalizeRouteModel({
         baseDomain: config.baseDomain,
@@ -390,12 +421,19 @@ export function normalizePublishingConfig(input = {}, env = {}) {
     if (livekitRoutes.length !== 1) {
         throw new Error('Web Publishing requires exactly one enabled LiveKit signaling exposure.');
     }
+    const officeRoutes = routes.filter((route) => route.enabled && route.originId === 'onlyoffice');
+    if (officeRoutes.length !== 1) {
+        throw new Error('Web Publishing requires exactly one enabled OnlyOffice editor exposure.');
+    }
     const livekitHost = livekitRoutes[0].hostname;
     const isLocal = !baseDomain && livekitHost === '127.0.0.1';
     if (!baseDomain && !isLocal) {
         throw new Error('A public LiveKit signaling exposure requires WEB_PUBLISHING_BASE_DOMAIN.');
     }
     if (isLocal) {
+        if (officeRoutes[0].hostname !== 'office.localhost') {
+            throw new Error('Local OnlyOffice publishing must use the canonical office.localhost hostname.');
+        }
         if (config.mode !== 'nginx') {
             throw new Error('Local Web Publishing supports only nginx mode; Cloudflare modes require a public base domain.');
         }
@@ -511,7 +549,9 @@ export function buildProviderValues(config, env = {}) {
     const officeRoute = byOrigin.get('onlyoffice');
     const livekitRoute = byOrigin.get('livekit-http');
     const explorerUrl = config.publicUrl || publicUrlForRoute(explorerRoute);
-    const officeUrl = publicUrlForRoute(officeRoute);
+    const officeUrl = config.baseDomain
+        ? publicUrlForRoute(officeRoute)
+        : `http://${officeRoute.hostname}:${DEFAULT_LISTEN_PORT}`;
     const livekitHost = livekitRoute?.hostname || '';
     const trustedTls = config.tlsEdge === 'cloudflare' || config.tlsEdge === 'external';
     if (config.baseDomain && !trustedTls) {
@@ -566,7 +606,7 @@ export function buildProviderValues(config, env = {}) {
 export function buildProviderWarnings(config) {
     const warnings = [];
     if (!config.baseDomain) {
-        warnings.push('Local signaling is available only at ws://127.0.0.1:8081/rtc; public topology is not configured.');
+        warnings.push('Local browser routes are available at http://office.localhost:8081 and ws://127.0.0.1:8081/rtc; public topology is not configured.');
     }
     if (modeUsesCloudflare(config.mode) && (config.exposures || []).some((entry) => entry.originId === 'livekit-http')) {
         warnings.push('Cloudflare HTTP tunnels can publish LiveKit signaling, but LiveKit/TURN UDP media still requires explicit direct media-plane exposure.');
