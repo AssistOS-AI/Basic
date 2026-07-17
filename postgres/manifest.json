@@ -7,7 +7,7 @@
     },
     "profiles": {
         "default": {
-            "openPorts": ["5432:5432"],
+            "ports": ["5432:5432"],
             "env": {
                 "POSTGRES_USER": { "default": "postgres" },
                 "POSTGRES_PASSWORD": { "default": "postgres" },

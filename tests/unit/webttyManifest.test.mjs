@@ -13,11 +13,18 @@ function readWebttyManifest() {
     return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 }
 
-test('webtty keeps its browser server private while preserving router and readiness access', () => {
+test('webtty routes its browser server through an authenticated explicit service target', () => {
     const manifest = readWebttyManifest();
     const defaultProfile = manifest.profiles?.default || {};
 
-    assert.equal(defaultProfile.additionalServerPort, '7681');
     assert.equal(Object.hasOwn(defaultProfile, 'openPorts'), false);
     assert.equal(Object.hasOwn(defaultProfile, 'ports'), false);
+    assert.equal(manifest.routerAccess, undefined);
+    assert.deepEqual(manifest.httpServices, [{
+        slug: 'webtty',
+        externalPrefix: '/services/webtty/',
+        internalPrefix: '/',
+        access: 'authenticated',
+        port: 7681,
+    }]);
 });

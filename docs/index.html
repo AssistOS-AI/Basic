@@ -18,8 +18,6 @@
             <nav class="nav" aria-label="Primary">
                 <a href="index.html">Overview</a>
                 <a href="bwrap-runner.html">bwrap-runner</a>
-                <a href="cloudflared.html">cloudflared</a>
-                <a href="web-publishing.html">web-publishing</a>
                 <a href="specsLoader.html?spec=matrix.md">Specifications</a>
             </nav>
         </div>
@@ -81,14 +79,6 @@ flowchart LR
                             <td>Declares MCP tools when an agent exposes tool commands through AgentServer.</td>
                         </tr>
                         <tr>
-                            <td><code>cloudflared/manifest.json</code></td>
-                            <td>Runs Cloudflare Tunnel inside Ploinky box without publishing agent ports directly.</td>
-                        </tr>
-                        <tr>
-                            <td><code>web-publishing/manifest.json</code></td>
-                            <td>Owns Explorer public topology, nginx data-plane routing, optional Cloudflare Tunnel operation, and startup config-provider outputs.</td>
-                        </tr>
-                        <tr>
                             <td><code>tests/unit/</code></td>
                             <td>Contains focused Node tests for agent-local policy and smoke behavior.</td>
                         </tr>
@@ -118,45 +108,6 @@ flowchart LR
                 The nested-bwrap smoke test skips cleanly when
                 <code>/usr/bin/bwrap</code> or nested user namespaces are
                 unavailable.
-            </p>
-        </section>
-
-        <section>
-            <h2>Tunnel Connector</h2>
-            <p>
-                <code>cloudflared</code> runs Cloudflare Tunnel as an outbound
-                connector from inside Ploinky box. Operators configure
-                Cloudflare public hostnames to target the Ploinky router at
-                <code>http://ploinky-router:8080</code> over the connector's
-                isolated default network. Host-gateway and sibling-agent
-                origins are rejected. The connector does not
-                declare direct port publication, guest access, service routes,
-                or MCP exposure; direct data-plane ports remain outside this
-                agent's contract.
-            </p>
-            <p>
-                See <a href="cloudflared.html">cloudflared</a> for operator
-                guidance and
-                <a href="specsLoader.html?spec=DS003-cloudflared-agent.md">DS003</a>
-                for the connector contract.
-            </p>
-        </section>
-
-        <section>
-            <h2>Web Publishing</h2>
-            <p>
-                <code>web-publishing</code> is the Explorer-facing public
-                topology owner for QA and production. It generates startup
-                config values for dependent agents, renders nginx route config,
-                supervises optional Cloudflare Tunnel operation, and exposes
-                its dashboard only through Explorer admin settings and admin
-                MCP tools.
-            </p>
-            <p>
-                See <a href="web-publishing.html">web-publishing</a> for
-                operator guidance and
-                <a href="specsLoader.html?spec=DS004-web-publishing-agent.md">DS004</a>
-                for the agent contract.
             </p>
         </section>
 
