@@ -56,7 +56,7 @@ The manifest must expose one admin-only Explorer settings entry with key
 `cloudflared-settings`. The corresponding AchillesIDE plugin lives under
 `cloudflared/IDE-plugins/cloudflared-settings/` and owns the dashboard UI. The
 dashboard must call the router-mediated `/cloudflared/mcp` endpoint and must use
-the existing admin MCP tools rather than adding direct HTTP service exposure or
+the existing admin MCP tools rather than adding a direct additional-server route or
 Explorer-owned Cloudflare logic.
 
 The default Cloudflare published-application route for Ploinky box must target
@@ -65,9 +65,9 @@ the Ploinky router from the connector container's point of view:
 as `localhost:8080`, because `localhost` inside the connector means the
 `cloudflared` container itself.
 
-The `cloudflared` agent must not declare `routerAccess`, `httpServices`,
-`guest`, `ssoProvider`, `ports`, or `openPorts`. It does not own Ploinky
-routing, authentication, guest access, HTTP service publication, or direct port
+The `cloudflared` agent must not declare `routerAccess`, `guest`,
+`ssoProvider`, `ports`, or `openPorts`. It does not own Ploinky routing,
+authentication, guest access, Router path publication, or direct port
 publication. It is an outbound connector plus admin control plane for
 router-hosted HTTP and WebSocket traffic.
 
@@ -84,7 +84,7 @@ callbacks, and storage endpoints.
 ### Question #1: Why does the agent target the router instead of individual agent ports?
 
 Response: Ploinky's router owns authentication, policy, route prefixing, MCP
-proxying, task status, and public HTTP service decisions. Tunneling arbitrary
+proxying, task status, and public Router-route decisions. Tunneling arbitrary
 agent ports would bypass that boundary. The connector therefore documents the
 router target `http://host.containers.internal:8080` as the supported HTTP and
 WebSocket origin for Cloudflare published applications.

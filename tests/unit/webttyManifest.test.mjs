@@ -23,15 +23,12 @@ test('webtty keeps its browser server private for the Ploinky runtime relay', ()
 
     assert.equal(Object.hasOwn(defaultProfile, 'openPorts'), false);
     assert.equal(Object.hasOwn(defaultProfile, 'ports'), false);
-    assert.equal(Object.hasOwn(manifest, 'routerAccess'), false);
+    assert.equal(Object.hasOwn(manifest, 'httpServices'), false);
     assert.equal(manifest.start, '/usr/local/bin/webtty-start');
     assert.equal(manifest.health?.readiness?.script, 'healthcheck.sh');
     assert.equal(defaultProfile.env?.PORT?.default, '7681');
-    assert.deepEqual(manifest.httpServices, [{
-        slug: 'webtty',
-        port: 7681,
-        externalPrefix: '/services/webtty/',
-        internalPrefix: '/',
+    assert.deepEqual(manifest.routerAccess.httpRoutes, [{
+        path: '/base-agent-additional-server/webtty/7681/*',
         access: 'authenticated',
     }]);
 });

@@ -15,8 +15,9 @@ entrypoint listens on container port `7681`; it does not run AgentServer.
 
 The manifest must not publish a host port or declare `openPorts`, `ports`,
 `hostPort`, or `additionalServerPort`. It declares one authenticated
-`httpServices` target on private container port `7681`. Authenticated browser
-clients reach it only through the same-origin Router path `/services/webtty/`.
+`routerAccess.httpRoutes` policy for convention-selected container port `7681`.
+Authenticated browser clients reach it only through the same-origin Router path
+`/base-agent-additional-server/webtty/7681/`.
 Query parameters such as `dir` are appended to that locator and do not select a
 host or private address.
 

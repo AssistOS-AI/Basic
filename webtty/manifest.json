@@ -11,15 +11,14 @@
       "successThreshold": 1
     }
   },
-  "httpServices": [
-    {
-      "slug": "webtty",
-      "port": 7681,
-      "externalPrefix": "/services/webtty/",
-      "internalPrefix": "/",
-      "access": "authenticated"
-    }
-  ],
+  "routerAccess": {
+    "httpRoutes": [
+      {
+        "path": "/base-agent-additional-server/webtty/7681/*",
+        "access": "authenticated"
+      }
+    ]
+  },
   "volumes": {
     ".": "/workspace"
   },
