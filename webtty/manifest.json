@@ -1,34 +1,25 @@
 {
   "container": "docker.io/assistos/webtty-agent:node24",
   "about": "Browser terminal that runs bash inside an isolated container, scoped to a workspace folder.",
-  "start": "node /opt/webtty-agent/server.mjs",
-  "readiness": {
-    "protocol": "tcp"
+  "start": "/usr/local/bin/webtty-start",
+  "health": {
+    "readiness": {
+      "script": "healthcheck.sh",
+      "interval": 1,
+      "timeout": 3,
+      "failureThreshold": 30,
+      "successThreshold": 1
+    }
   },
-  "routerAccess": {
-    "httpRoutes": [
-      {
-        "path": "/stream",
-        "access": "authenticated"
-      },
-      {
-        "path": "/input",
-        "access": "authenticated"
-      },
-      {
-        "path": "/resize",
-        "access": "authenticated"
-      },
-      {
-        "path": "/whoami",
-        "access": "authenticated"
-      },
-      {
-        "path": "/assets/*",
-        "access": "authenticated"
-      }
-    ]
-  },
+  "httpServices": [
+    {
+      "slug": "webtty",
+      "port": 7681,
+      "externalPrefix": "/services/webtty/",
+      "internalPrefix": "/",
+      "access": "authenticated"
+    }
+  ],
   "volumes": {
     ".": "/workspace"
   },

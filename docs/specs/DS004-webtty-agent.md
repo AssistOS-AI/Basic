@@ -10,20 +10,21 @@ summary: Defines the confined WebTTY runtime and its authenticated RoutingServer
 
 ## Core Content
 
-`webtty` is a start-only HTTP and Server-Sent Events agent. Its process listens
-on container port `7681`; it does not run AgentServer and has no implicit
-primary route.
+`webtty` is a start-only HTTP and Server-Sent Events agent. Its verified image
+entrypoint listens on container port `7681`; it does not run AgentServer.
 
 The manifest must not publish a host port or declare `openPorts`, `ports`,
-`hostPort`, or `additionalServerPort`. Authenticated browser clients reach the
-service only through Ploinky's confined runtime relay at
-`/base-agent-additional-server/webtty/7681/`. Query parameters such as `dir`
-are appended to that same-origin route and do not select a host or private
-address.
+`hostPort`, or `additionalServerPort`. It declares one authenticated
+`httpServices` target on private container port `7681`. Authenticated browser
+clients reach it only through the same-origin Router path `/services/webtty/`.
+Query parameters such as `dir` are appended to that locator and do not select a
+host or private address.
 
 The agent remains safe to start as a no-wait Explorer dependency. Availability
-is determined when the authorized relay request reaches port `7681`, rather
-than by promoting the custom listener to a Ploinky primary service.
+is first gated by an in-container loopback readiness probe on port `7681`, then
+confirmed for users when the authorized Router service reaches that same
+listener. The mapping remains Router-private and cannot become an outer Box
+publication.
 
 ## Decisions & Questions
 
