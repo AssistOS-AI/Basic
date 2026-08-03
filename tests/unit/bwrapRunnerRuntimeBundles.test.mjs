@@ -278,6 +278,7 @@ test('buildBwrapArgs binds the resolved bundle dir read-only at /runtime and doe
             workDir,
             existingSystemPaths: new Set(['/usr', '/bin']),
             runtimeBundle: resolved,
+            procMode: 'private',
         });
 
         const argv = args.join(' ');
@@ -306,6 +307,7 @@ test('buildBwrapArgs omits /runtime bind when no bundle is provided', () => {
         const args = buildBwrapArgs(validated, {
             workDir,
             existingSystemPaths: new Set(['/usr', '/bin']),
+            procMode: 'private',
         });
         assert.ok(!args.includes('/runtime'), '/runtime must not appear when no bundle is requested');
     } finally {

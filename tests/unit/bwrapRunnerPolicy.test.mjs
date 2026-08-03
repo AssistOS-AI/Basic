@@ -70,6 +70,7 @@ test('default policy enables --unshare-net and a fixed isolation set', () => {
             workDir,
             outputsDir,
             existingSystemPaths: new Set(['/usr', '/bin']),
+            procMode: 'private',
         });
         for (const flag of [
             '--die-with-parent',
@@ -96,7 +97,11 @@ test('--unshare-net is omitted only when allowNetwork=true', () => {
     const validated = validateInput({ command: 'echo hi' }, { allowNetwork: true });
     const { workDir } = makePaths();
     try {
-        const args = buildBwrapArgs(validated, { workDir, existingSystemPaths: new Set() });
+        const args = buildBwrapArgs(validated, {
+            workDir,
+            existingSystemPaths: new Set(),
+            procMode: 'private',
+        });
         assert.ok(!args.includes('--unshare-net'), 'network=inherit should drop --unshare-net');
         assert.strictEqual(validated.network, 'inherit');
     } finally {
@@ -111,7 +116,11 @@ test('--clearenv is set and only allowlisted env survives', () => {
     });
     const { workDir } = makePaths();
     try {
-        const args = buildBwrapArgs(validated, { workDir, existingSystemPaths: new Set() });
+        const args = buildBwrapArgs(validated, {
+            workDir,
+            existingSystemPaths: new Set(),
+            procMode: 'private',
+        });
         const clearIdx = args.indexOf('--clearenv');
         assert.ok(clearIdx >= 0, '--clearenv must be present');
 
@@ -289,15 +298,19 @@ test('staged files enforce field, encoding, entry, and byte limits', () => {
 test('paths argument must be absolute and free of traversal sequences', () => {
     const validated = validateInput({ command: 'echo hi' });
     assert.throws(
-        () => buildBwrapArgs(validated, { workDir: 'relative/path' }),
+        () => buildBwrapArgs(validated, { workDir: 'relative/path', procMode: 'private' }),
         /paths.workDir must be an absolute path/,
     );
     assert.throws(
-        () => buildBwrapArgs(validated, { workDir: '/abs/with/..//evil' }),
+        () => buildBwrapArgs(validated, { workDir: '/abs/with/..//evil', procMode: 'private' }),
         /paths.workDir must not contain/,
     );
     assert.throws(
-        () => buildBwrapArgs(validated, { workDir: '/abs', outputsDir: '/abs/with/..' }),
+        () => buildBwrapArgs(validated, {
+            workDir: '/abs',
+            outputsDir: '/abs/with/..',
+            procMode: 'private',
+        }),
         /paths.outputsDir must not contain/,
     );
 });
@@ -311,6 +324,7 @@ test('no arbitrary bind paths from the user input', () => {
             workDir,
             outputsDir,
             existingSystemPaths: allowedSystemPaths,
+            procMode: 'private',
         });
         // Every --bind/--ro-bind source must be one of:
         //  - an entry in our system-RO allowlist (intersected with existence)

@@ -12,9 +12,16 @@ import {
     validateInput,
 } from '../lib/policy.mjs';
 import { normalizeStagedFiles, stageFiles } from '../lib/staging.mjs';
-import { resolveRuntimeBundle } from '../lib/runtime-bundles.mjs';
-
-const BWRAP_PATH = '/usr/bin/bwrap';
+import {
+    resolveRuntimeBundle,
+    validateRuntimeBundleInput,
+} from '../lib/runtime-bundles.mjs';
+import {
+    BWRAP_CAPABILITY_ERROR_CODE,
+    BWRAP_RUNNER_ABI,
+    parseTrustedProcMinimum,
+    resolveBwrapCapability,
+} from '../lib/capability.mjs';
 
 function parseIntFromEnv(name, fallback) {
     const raw = process.env[name];
@@ -107,10 +114,10 @@ function preparePerJobDirs(stateRoot) {
     return { jobId, jobRoot, workDir, outputsDir };
 }
 
-function runBwrap(args, validated, limits) {
+function runBwrap(executablePath, args, validated, limits) {
     return new Promise((resolve) => {
         const startedAt = Date.now();
-        const child = spawn(BWRAP_PATH, args, {
+        const child = spawn(executablePath, args, {
             stdio: ['pipe', 'pipe', 'pipe'],
             env: {},
         });
@@ -213,6 +220,19 @@ function emit(result) {
 }
 
 async function main() {
+    let procMinimum;
+    try {
+        procMinimum = parseTrustedProcMinimum(process.argv.slice(2));
+    } catch (err) {
+        emit({
+            ok: false,
+            runnerAbi: BWRAP_RUNNER_ABI,
+            error: { code: 'BWRAP_RUNNER_INVALID_TRUSTED_OPTION', message: err.message || String(err) },
+        });
+        process.exit(1);
+        return;
+    }
+
     let payload;
     try {
         const raw = await readPayload();
@@ -262,6 +282,37 @@ async function main() {
         emit({
             ok: false,
             error: { code: err.code || 'BWRAP_RUNNER_INVALID_INPUT', message: err.message || String(err) },
+        });
+        process.exit(1);
+        return;
+    }
+
+    try {
+        validated.runtimeBundle = validateRuntimeBundleInput(validated.runtimeBundle);
+    } catch (err) {
+        emit({
+            ok: false,
+            error: { code: err.code || 'BWRAP_RUNNER_INVALID_RUNTIME_BUNDLE', message: err.message || String(err) },
+        });
+        process.exit(1);
+        return;
+    }
+
+    // Capability resolution is deliberately before state paths, job records,
+    // staged files, or runtime bundles are touched.
+    let capability;
+    try {
+        capability = resolveBwrapCapability({ minimum: procMinimum, allowNetwork });
+    } catch (err) {
+        emit({
+            ok: false,
+            runnerAbi: BWRAP_RUNNER_ABI,
+            error: {
+                code: err?.code || BWRAP_CAPABILITY_ERROR_CODE,
+                message: err?.message || 'Bubblewrap capability unavailable',
+                terminal: true,
+            },
+            capability: err?.capability || null,
         });
         process.exit(1);
         return;
@@ -333,9 +384,10 @@ async function main() {
         outputsDir: dirs.outputsDir,
         existingSystemPaths: existingSystemPathsSet(),
         runtimeBundle: resolvedRuntimeBundle,
+        procMode: capability.mode,
     });
 
-    const result = await runBwrap(args, validated, validated.limits);
+    const result = await runBwrap(capability.binaryIdentity.realpath, args, validated, validated.limits);
     const stdout = truncateOutput(
         result.stdoutBuffer || Buffer.alloc(0),
         validated.limits.maxStdoutBytes,
@@ -355,6 +407,9 @@ async function main() {
         timedOut: Boolean(result.timedOut),
         elapsedMs: result.elapsedMs,
         network: validated.network,
+        runnerAbi: BWRAP_RUNNER_ABI,
+        procMode: capability.mode,
+        procMinimum: capability.minimum,
         stdout: {
             text: stdout.text,
             truncated: stdout.truncated,

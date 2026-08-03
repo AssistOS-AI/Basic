@@ -31,9 +31,12 @@ profile exposes `BWRAP_RUNNER_IMAGE` with the same default for the host
 with Podman or Docker from the sibling `container-image-builds` checkout when
 available, otherwise it pulls the published Docker Hub image before container
 creation.
-Provider manifests that spawn inner bwrap jobs must request
-`containerSecurity.privileged: true` so the outer OCI runtime permits the inner
-bubblewrap sandbox to create namespaces and mount `/proc`.
+The runner is being migrated to an unprivileged nested-container contract. The
+compatibility agent deliberately retains `containerSecurity.privileged: true`
+until a replacement image built from this source passes native amd64 and arm64
+unprivileged gates and is recorded by immutable digest. Keeping the declaration
+during this source-only phase prevents an unproven moving tag from being treated
+as rollout evidence.
 
 The canonical published image is built by manually dispatching
 `publish-bwrap-runner.yml` in `AssistOS-AI/container-image-builds`. That
@@ -84,6 +87,17 @@ Inputs:
   browser, relay, and agent-to-agent payloads cannot supply mount paths or
   arbitrary flags.
 
+Before any state directory, job, staged file, or provider runtime is touched,
+the runner resolves `/usr/bin/bwrap` to an absolute executable with a frozen
+device/inode/size/time identity and verifies that outer `/proc/self` represents
+the runner's current PID namespace. It then tries the complete representative
+policy with a private proc and, after any private failure, with a safe empty
+proc. It never binds the outer proc into a task. A task payload, staged file, or
+environment variable cannot select a proc mode. Trusted provider adapters may
+only tighten the minimum to private proc with the fixed
+`--minimum=private` process argument; they cannot loosen the capability result.
+The capability ABI is `2`.
+
 Default policy applied inside the inner sandbox:
 
 - `--die-with-parent`, `--unshare-user`, `--unshare-pid`,
@@ -94,7 +108,8 @@ Default policy applied inside the inner sandbox:
   only.
 - Read-only binds for `/usr`, `/lib`, `/lib64`, `/bin`, `/sbin`, and a
   curated set of `/etc` files that exist in the image.
-- `--proc /proc`, `--dev /dev`, `--tmpfs /tmp`.
+- Either `--proc /proc` for a proven private proc or `--dir /proc` for the
+  proven safe fallback, followed by `--dev /dev`, `--tmpfs /tmp`.
 - Per-job read-write `/work` directory and a sibling `/outputs`
   directory, both created under
   `BWRAP_RUNNER_STATE/jobs/<jobId>/`.
@@ -117,6 +132,9 @@ The wrapper returns a single-line JSON record:
   "timedOut": false,
   "elapsedMs": 12,
   "network": "none",
+  "runnerAbi": 2,
+  "procMode": "private|empty",
+  "procMinimum": "private-or-empty|private",
   "stdout": {"text": "...", "truncated": false, "byteLength": 12},
   "stderr": {"text": "...", "truncated": false, "byteLength": 0}
 }
@@ -161,12 +179,21 @@ path for research providers, and the runner does not bind any portion of
 
 The manifest `agent` command runs `bin/healthcheck.mjs` before starting
 `AgentServer.sh`, and `healthcheck.sh` wires the same probe into
-Ploinky's readiness loop. Both paths run a real nested-bwrap smoke
-command. If the host kernel or outer container runtime blocks
-`CLONE_NEWUSER`, startup/readiness fails with stderr describing the
-failure. This image cannot bake host sysctls such as
+Ploinky's readiness loop. Both paths run the same canonical, real
+representative policy used to select the task proc mode. Readiness returns one
+bounded JSON record containing `runnerAbi`, the selected capability, its
+trusted minimum, the frozen binary identity, and safe probe diagnostics. If
+neither proc mode meets the minimum, readiness and task execution fail before
+task mutation with `PLOINKY_BWRAP_CAPABILITY_UNAVAILABLE`. This image cannot bake host sysctls such as
 `kernel.unprivileged_userns_clone` in; operators must configure those
 settings on the host.
+
+`tests/integration/bwrapRunnerNative.mjs` is the publication gate for both
+private and empty proc modes. It intentionally has no skip path and executes a
+real command with the production policy, proves authorized work/output writes,
+and proves a sibling path is unavailable. Unit tests on hosts without
+Bubblewrap assert the deterministic unavailable contract rather than claiming
+native capability.
 
 ## Limitations
 
@@ -175,6 +202,9 @@ settings on the host.
   host kernel or runtime policy. Ploinky does not currently expose a
   manifest field for raw OCI flags, and adding one is out of scope for
   this iteration.
+- The retained privileged compatibility manifest is not permission to publish
+  or consume this source through a mutable tag. Privilege removal and digest
+  pinning remain gated on the native image evidence described above.
 - Networked jobs require an explicit operator opt-in via
   `BWRAP_RUNNER_ALLOW_NETWORK=true`. Per-request network selection is
   intentionally not exposed.

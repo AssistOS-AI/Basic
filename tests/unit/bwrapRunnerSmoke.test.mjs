@@ -1,8 +1,5 @@
-// Smoke test for the bwrap-runner agent's nested-bwrap healthcheck.
-//
-// This test only runs when /usr/bin/bwrap exists AND a probing nested
-// user-namespace command succeeds. Otherwise we skip cleanly; CI runners
-// without nested-namespace support should not fail this test.
+// Host-independent contract test for the real healthcheck entry point. Native
+// image publication runs the separate non-skipping two-mode integration gate.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,48 +10,43 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const BWRAP_PATH = '/usr/bin/bwrap';
 const HEALTHCHECK = path.resolve(__dirname, '../../bwrap-runner/bin/healthcheck.mjs');
+const MANIFEST = path.resolve(__dirname, '../../bwrap-runner/manifest.json');
 
-function probeNestedBwrap() {
-    if (!fs.existsSync(BWRAP_PATH)) {
-        return { ok: false, reason: 'bwrap binary not installed at /usr/bin/bwrap' };
-    }
-    const probe = spawnSync(BWRAP_PATH, [
-        '--unshare-user',
-        '--unshare-pid',
-        '--ro-bind', '/usr', '/usr',
-        '--proc', '/proc',
-        '--dev', '/dev',
-        '--tmpfs', '/tmp',
-        '--', '/bin/true',
-    ], { encoding: 'utf8', timeout: 5_000 });
-    if (probe.error) {
-        return { ok: false, reason: `bwrap probe spawn error: ${probe.error.message}` };
-    }
-    if (probe.status !== 0) {
-        return {
-            ok: false,
-            reason: `bwrap probe failed (exit=${probe.status}): ${String(probe.stderr || '').trim()}`,
-        };
-    }
-    return { ok: true };
-}
+test('compatibility manifest retains privilege and gives the two-probe health contract time to report', () => {
+    const manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
+    assert.equal(manifest.containerSecurity?.privileged, true);
+    assert.equal(manifest.health?.readiness?.timeout, 30);
+});
 
-test('healthcheck.mjs reports OK when nested bwrap works', { concurrency: false }, (t) => {
-    const probe = probeNestedBwrap();
-    if (!probe.ok) {
-        t.skip(`nested bwrap unavailable: ${probe.reason}`);
-        return;
-    }
+test('healthcheck.mjs reports a canonical capability outcome without skipping', { concurrency: false }, () => {
     const result = spawnSync(process.execPath, [HEALTHCHECK], {
         encoding: 'utf8',
         timeout: 15_000,
     });
-    assert.strictEqual(result.status, 0,
-        `healthcheck failed: stdout=${result.stdout} stderr=${result.stderr}`);
+    assert.ok(result.status === 0 || result.status === 1, `unexpected status ${result.status}`);
     const line = String(result.stdout || '').trim().split('\n').pop();
+    assert.ok(line, `healthcheck produced no JSON. stderr=${result.stderr}`);
     const record = JSON.parse(line);
-    assert.strictEqual(record.ok, true);
+    assert.equal(record.runnerAbi, 2);
+    if (result.status === 0) {
+        assert.equal(record.ok, true);
+        assert.equal(record.code, 'BWRAP_RUNNER_READY');
+        assert.match(record.capability.mode, /^(?:private|empty)$/);
+        assert.equal(record.capability.minimum, 'private-or-empty');
+    } else {
+        assert.equal(record.ok, false);
+        assert.equal(record.code, 'PLOINKY_BWRAP_CAPABILITY_UNAVAILABLE');
+        assert.equal(record.capability?.minimum, 'private-or-empty');
+    }
+});
+
+test('healthcheck accepts only the trusted tighten-only private requirement', () => {
+    const result = spawnSync(process.execPath, [HEALTHCHECK, '--minimum=private-or-empty'], {
+        encoding: 'utf8',
+        timeout: 15_000,
+    });
+    assert.equal(result.status, 1);
+    const record = JSON.parse(String(result.stdout || '').trim().split('\n').pop());
+    assert.equal(record.code, 'BWRAP_RUNNER_INVALID_TRUSTED_OPTION');
 });

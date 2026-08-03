@@ -219,6 +219,10 @@ export function buildBwrapArgs(validated, paths) {
     const runtimeBundle = paths.runtimeBundle && isPlainObject(paths.runtimeBundle)
         ? paths.runtimeBundle
         : null;
+    const procMode = paths.procMode;
+    if (procMode !== 'private' && procMode !== 'empty') {
+        throw rejectInput('paths.procMode must be the trusted value private or empty');
+    }
     let runtimeBundleDir = null;
     if (runtimeBundle) {
         runtimeBundleDir = ensureAbsolutePath('paths.runtimeBundle.bundleDir', runtimeBundle.bundleDir);
@@ -260,7 +264,11 @@ export function buildBwrapArgs(validated, paths) {
         args.push('--ro-bind', systemPath, systemPath);
     }
 
-    args.push('--proc', '/proc');
+    if (procMode === 'private') {
+        args.push('--proc', '/proc');
+    } else {
+        args.push('--dir', '/proc');
+    }
     args.push('--dev', '/dev');
     args.push('--tmpfs', '/tmp');
 
