@@ -27,13 +27,14 @@ test('webtty keeps its browser server private for the Ploinky runtime relay', ()
     assert.equal(manifest.start, '/usr/local/bin/webtty-start');
     assert.equal(manifest.health?.readiness?.script, 'healthcheck.sh');
     assert.equal(defaultProfile.env?.PORT?.default, '7681');
+    assert.equal(defaultProfile.env?.WEBTTY_PORT?.default, '7681');
     assert.deepEqual(manifest.routerAccess.httpRoutes, [{
         path: '/base-agent-additional-server/webtty/7681/*',
         access: 'authenticated',
     }]);
 });
 
-test('webtty readiness checks its in-container loopback listener', async (t) => {
+test('webtty readiness ignores the outer runtime PORT and checks its namespaced listener', async (t) => {
     const server = net.createServer((socket) => socket.end());
     await new Promise((resolve, reject) => {
         server.once('error', reject);
@@ -45,7 +46,8 @@ test('webtty readiness checks its in-container loopback listener', async (t) => 
     await execFileAsync('sh', [script], {
         env: {
             ...process.env,
-            PORT: String(server.address().port),
+            PORT: '8080',
+            WEBTTY_PORT: String(server.address().port),
         },
         timeout: 5000,
     });

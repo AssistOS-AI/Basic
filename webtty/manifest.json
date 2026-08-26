@@ -31,6 +31,9 @@
         "PORT": {
           "default": "7681"
         },
+        "WEBTTY_PORT": {
+          "default": "7681"
+        },
         "SHELL": {
           "default": "/bin/bash"
         }
