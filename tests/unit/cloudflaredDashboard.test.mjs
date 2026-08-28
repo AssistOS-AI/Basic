@@ -98,7 +98,7 @@ test('raw Explorer settings resolution points at existing dashboard files', () =
 
     assert.equal(
         base,
-        '/workspace-files/cloudflared/IDE-plugins/cloudflared-settings/cloudflared-settings/cloudflared-settings',
+        '/workspace-files/cloudflared/IDE-plugins/cloudflared-settings/cloudflared-settings',
     );
 
     const localBase = path.join(
