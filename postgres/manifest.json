@@ -3,7 +3,7 @@
     "about": "PostgreSQL database server for Keycloak and other applications",
     "start": "postgres",
     "volumes": {
-        ".ploinky/data/postgres/data": "/var/lib/postgresql/data"
+        ".data/postgres/data": "/var/lib/postgresql/data"
     },
     "profiles": {
         "default": {

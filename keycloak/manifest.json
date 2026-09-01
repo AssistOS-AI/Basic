@@ -4,7 +4,7 @@
     "ssoProvider": true,
     "start": "start --hostname-strict=false --http-enabled=true --proxy-headers forwarded",
     "volumes": {
-        ".ploinky/data/keycloak/data": "/opt/keycloak/data"
+        ".data/keycloak/data": "/opt/keycloak/data"
     },
     "volumeOptions": {
         "/opt/keycloak/data": {
