@@ -1,9 +1,6 @@
 {
-  "container": "assistos/bwrap-runner:node24-python-bookworm",
+  "container": "docker.io/assistos/bwrap-runner@sha256:9b6c08cf78fd0a29acfbe2e45ea2ee26efe6fde49c7f3db8b3aadfa30f2d53f8",
   "about": "Compatibility-only MCP wrapper around the shared local sandbox runner. Research provider agents use the bwrap-runner image directly and invoke /usr/local/bin/bwrap-sandbox-exec locally; they must not depend on this agent.",
-  "containerSecurity": {
-    "privileged": true
-  },
   "agent": "node /code/bin/healthcheck.mjs && sh /Agent/server/AgentServer.sh",
   "readiness": {
     "protocol": "mcp"
@@ -28,7 +25,7 @@
       "preinstall": "scripts/build-image.sh",
       "env": {
         "BWRAP_RUNNER_IMAGE": {
-          "default": "assistos/bwrap-runner:node24-python-bookworm"
+          "default": "docker.io/assistos/bwrap-runner@sha256:9b6c08cf78fd0a29acfbe2e45ea2ee26efe6fde49c7f3db8b3aadfa30f2d53f8"
         },
         "BWRAP_RUNNER_MAX_TIMEOUT_MS": {
           "default": "120000"

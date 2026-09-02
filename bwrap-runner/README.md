@@ -17,32 +17,34 @@ shim at `/usr/local/bin/bwrap-sandbox-exec` that runs the local sandbox CLI
 under the image's Node.js. Provider agents invoke that shim directly inside
 their own container; they do not call a remote `sandbox_exec` MCP tool.
 
-The retained compatibility manifest uses the concrete image reference
-`assistos/bwrap-runner:node24-python-bookworm`. The image is based on Node
-24 Bookworm and also installs a generic Python 3 toolchain (`python3`,
-`python3-pip`, `python3-venv`, `python3-dev`, `python3-setuptools`,
-`python3-wheel`) plus build tooling so provider agents can prepare and execute
-backend runtimes with the same Linux Python ABI on macOS and Linux hosts. The
-image deliberately does not install backend-specific Python packages such as
-Open Interpreter. Those runtimes are owned by the provider agent. The default
-profile exposes `BWRAP_RUNNER_IMAGE` with the same default for the host
-`preinstall` hook. That hook runs
-`scripts/build-image.sh`; if the image is missing locally, the script builds it
+The manifest selects the verified multiarchitecture image
+`docker.io/assistos/bwrap-runner@sha256:9b6c08cf78fd0a29acfbe2e45ea2ee26efe6fde49c7f3db8b3aadfa30f2d53f8`.
+The image composes pinned Node 24.20 and Python 3.12 Trixie bases and supplies
+pip, venv, headers, and build tools. Provider agents prepare their own backend
+packages with the same Linux Python ABI on macOS and Linux hosts. The image
+deliberately does not install backend-specific packages such as Open Interpreter.
+The default profile exposes `BWRAP_RUNNER_IMAGE` with the same digest for the
+host `preinstall` hook. That hook runs `scripts/build-image.sh`;
+if a digest reference is missing locally, the script
+pulls that exact image and propagates a pull failure. It never builds a local
+image under a registry digest. For an explicit development tag, it builds it
 with Podman or Docker from the sibling `container-image-builds` checkout when
 available, otherwise it pulls the published Docker Hub image before container
 creation.
-The runner is being migrated to an unprivileged nested-container contract. The
-compatibility agent deliberately retains `containerSecurity.privileged: true`
-until a replacement image built from this source passes native amd64 and arm64
-unprivileged gates and is recorded by immutable digest. Keeping the declaration
-during this source-only phase prevents an unproven moving tag from being treated
-as rollout evidence.
 
-The replacement image composes pinned Node 24.20 and Python 3.12 Trixie bases,
-uses `USER 1000:1000`, and provides a writable `/var/lib/ploinky-bwrap-runner`
+The Basic agent has no privileged declaration. The image uses `USER 1000:1000`
+and provides a writable `/var/lib/ploinky-bwrap-runner`
 and `/home/runner`. Providers install their runtimes below their own `HOME`;
 `/opt` remains image-owned. Rootless Podman uses
 `--userns=keep-id:uid=1000,gid=1000` to preserve access to provider-owned data.
+
+[Publication run 33662621018](https://github.com/AssistOS-AI/container-image-builds/actions/runs/33662621018)
+verified default and forced HTTP/2 Git transport, actual empty-proc sandbox
+boundaries, typed private-proc unavailability, Open Interpreter preparation and
+Box 422, and GPTResearcher cold setup and readiness on native amd64 and arm64.
+The empty-proc proof satisfies this generic runner's `private-or-empty`
+contract. It does not certify Open Interpreter's private-proc execution or
+remove that provider's existing compatibility restriction.
 
 The canonical published image is built by manually dispatching
 `publish-bwrap-runner.yml` in `AssistOS-AI/container-image-builds`. That
@@ -216,9 +218,9 @@ from unavailable ones. Open Interpreter retains its private minimum.
   host kernel or runtime policy. Ploinky does not currently expose a
   manifest field for raw OCI flags, and adding one is out of scope for
   this iteration.
-- The retained privileged compatibility manifest is not permission to publish
-  or consume this source through a mutable tag. Privilege removal and digest
-  pinning remain gated on the native image evidence described above.
+- The selected image has native empty-proc proof. Providers requiring private
+  proc must fail closed when the canonical capability probe reports it
+  unavailable; the image cannot relax the host's namespace policy.
 - Networked jobs require an explicit operator opt-in via
   `BWRAP_RUNNER_ALLOW_NETWORK=true`. Per-request network selection is
   intentionally not exposed.

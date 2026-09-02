@@ -13,9 +13,9 @@ const __dirname = path.dirname(__filename);
 const HEALTHCHECK = path.resolve(__dirname, '../../bwrap-runner/bin/healthcheck.mjs');
 const MANIFEST = path.resolve(__dirname, '../../bwrap-runner/manifest.json');
 
-test('compatibility manifest retains privilege and gives the two-probe health contract time to report', () => {
+test('compatibility manifest remains unprivileged and gives the two-probe health contract time to report', () => {
     const manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
-    assert.equal(manifest.containerSecurity?.privileged, true);
+    assert.equal(manifest.containerSecurity, undefined);
     assert.equal(manifest.health?.readiness?.timeout, 30);
 });
 

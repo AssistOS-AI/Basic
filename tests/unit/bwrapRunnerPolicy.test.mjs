@@ -434,14 +434,14 @@ test('wrapper end-to-end: invalid staged files return a structured, MCP-visible 
     }
 });
 
-test('manifest gates AgentServer startup on nested-bwrap healthcheck and builds the local image', () => {
+test('manifest adopts the proven unprivileged image and gates AgentServer on nested-bwrap health', () => {
     const manifestPath = path.resolve(__dirname, '../../bwrap-runner/manifest.json');
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    assert.strictEqual(manifest.container, 'assistos/bwrap-runner:node24-python-bookworm');
-    assert.deepStrictEqual(manifest.containerSecurity, { privileged: true });
+    assert.strictEqual(manifest.container, 'docker.io/assistos/bwrap-runner@sha256:9b6c08cf78fd0a29acfbe2e45ea2ee26efe6fde49c7f3db8b3aadfa30f2d53f8');
+    assert.strictEqual(manifest.containerSecurity, undefined);
     assert.strictEqual(
         manifest.profiles.default.env.BWRAP_RUNNER_IMAGE.default,
-        'assistos/bwrap-runner:node24-python-bookworm',
+        manifest.container,
     );
     assert.strictEqual(
         manifest.profiles.default.env.BWRAP_RUNNER_RUNTIME_ROOT.default,

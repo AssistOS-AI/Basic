@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-image="${BWRAP_RUNNER_IMAGE:-assistos/bwrap-runner:node24-python-bookworm}"
+image="${BWRAP_RUNNER_IMAGE:-docker.io/assistos/bwrap-runner@sha256:9b6c08cf78fd0a29acfbe2e45ea2ee26efe6fde49c7f3db8b3aadfa30f2d53f8}"
 
 if command -v podman >/dev/null 2>&1; then
     runtime=podman
@@ -16,6 +16,13 @@ if "$runtime" image inspect "$image" >/dev/null 2>&1; then
     echo "[bwrap-runner] image already available: $image"
     exit 0
 fi
+
+case "$image" in
+    *@sha256:*)
+        echo "[bwrap-runner] pulling immutable image $image with $runtime"
+        exec "$runtime" pull "$image"
+        ;;
+esac
 
 script_dir="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 agent_dir="$(CDPATH= cd -- "$script_dir/.." && pwd)"

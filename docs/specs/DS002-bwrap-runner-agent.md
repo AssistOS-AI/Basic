@@ -42,12 +42,17 @@ owned by their respective provider agents in `copilot-agents`.
 Research provider agents must use this image directly or use a documented
 derived image whose sandbox base remains this image. The provider manifest,
 not a bwrap-runner agent manifest, is the runtime surface that Ploinky starts.
-Providers adopting the verified runner ABI 2 image must use rootless,
+Providers certified for the verified runner ABI 2 execution contract must use rootless,
 unprivileged outer containers with all capabilities dropped and
 `no-new-privileges`. They must not request `containerSecurity.privileged: true`.
 The runner selects only a proven private or empty proc policy; providers that
 require private proc must report deterministic unavailability when that
 capability is absent rather than relaxing confinement.
+Open Interpreter's separate specification may retain its pre-existing
+privileged compatibility declaration while migrating only to a maintained
+immutable transport/runtime image. That transition is not certification of
+rootless or private-proc execution and must preserve its Box-unavailable
+preflight. The Basic generic runner has no such privilege exception.
 
 The image must install the reusable runner code at a stable image path so
 provider agents can invoke it locally. The shared modules live under
@@ -60,6 +65,9 @@ remote `sandbox_exec` MCP tool.
 
 The canonical published image must be produced by the manual GitHub Actions
 workflow `publish-bwrap-runner.yml` in `AssistOS-AI/container-image-builds`.
+The compatibility agent's preinstall hook must pull an absent digest reference
+exactly and propagate pull failure; it must never rebuild a registry digest
+from local source. Explicit development tags may retain local image builds.
 That workflow checks out this repository as the build context and uses
 `container-image-builds/images/bwrap-runner/Dockerfile` as the centralized
 Dockerfile. It must be manual-dispatch only through `workflow_dispatch`; it
@@ -147,6 +155,24 @@ materialization rules, then stage accepted content into `/work`; the inner
 bwrap job must not receive a broad `/shared` bind.
 
 ## Decisions & Questions
+
+### Decision #8: Adopt the verified Trixie image without rebuilding a digest
+
+The Basic catalog manifest and its preinstall default select
+`docker.io/assistos/bwrap-runner@sha256:9b6c08cf78fd0a29acfbe2e45ea2ee26efe6fde49c7f3db8b3aadfa30f2d53f8`.
+[Publication run 33662621018](https://github.com/AssistOS-AI/container-image-builds/actions/runs/33662621018)
+at build source `33cc912da5514fbbf95678a47a23e1d6911b9105` verified both native
+architectures before assembling that index. Both proved default and forced
+HTTP/2 Git transport, actual empty-proc task execution and filesystem boundaries,
+typed private-proc unavailability, Open Interpreter preparation and its Box 422
+disposition, and GPTResearcher cold setup and readiness. The Basic agent removes
+its old privileged declaration because its `private-or-empty` contract is
+proven under rootless confinement. This evidence does not certify private-proc
+execution or remove Open Interpreter's separate transition restriction.
+
+An absent digest is pulled exactly; a failed pull remains an installation
+failure. Local source may be built only under an explicit development tag,
+never under the published digest. Existing Bookworm tags are unchanged.
 
 ### Decision #7: Nonroot execution and capability-specific native proof
 
