@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { stageSystemFiles } from './system-files.mjs';
 
 import {
     buildBwrapArgs,
@@ -151,7 +152,7 @@ function existingSystemPaths(fsApi) {
     return result;
 }
 
-function buildRepresentativeProbeArgs(mode, fsApi, allowNetwork) {
+function buildRepresentativeProbeArgs(mode, fsApi, allowNetwork, systemFileSources) {
     const validated = validateInput({
         command: `test -d /work && test -d /outputs && test -d /proc && printf ${PROBE_OUTPUT}`,
     }, { allowNetwork });
@@ -159,14 +160,17 @@ function buildRepresentativeProbeArgs(mode, fsApi, allowNetwork) {
         workDir: '/tmp',
         outputsDir: '/tmp',
         existingSystemPaths: existingSystemPaths(fsApi),
+        systemFileSources,
         procMode: mode,
     });
 }
 
 function probeMode(mode, binaryIdentity, { fsApi, spawnSyncApi, allowNetwork }) {
-    const args = buildRepresentativeProbeArgs(mode, fsApi, allowNetwork);
     let result;
+    let systemFiles;
     try {
+        systemFiles = stageSystemFiles();
+        const args = buildRepresentativeProbeArgs(mode, fsApi, allowNetwork, systemFiles.sources);
         result = spawnSyncApi(binaryIdentity.realpath, args, {
             encoding: 'utf8',
             timeout: PROBE_TIMEOUT_MS,
@@ -174,6 +178,8 @@ function probeMode(mode, binaryIdentity, { fsApi, spawnSyncApi, allowNetwork }) 
         });
     } catch (error) {
         result = { error };
+    } finally {
+        systemFiles?.cleanup();
     }
     const stdout = safeText(result?.stdout, MAX_DIAGNOSTIC_BYTES).trim();
     const stderr = safeText(result?.stderr, MAX_DIAGNOSTIC_BYTES).trim();

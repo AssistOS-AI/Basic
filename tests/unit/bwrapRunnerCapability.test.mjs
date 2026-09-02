@@ -122,6 +122,32 @@ test('readiness capability applies the same trusted network policy as task argum
     }
 });
 
+test('representative probes use private network-file copies and remove them on success or spawn failure', () => {
+    const f = fixture();
+    const copies = [];
+    let count = 0;
+    try {
+        const capability = resolveWith(f, (_binary, args) => {
+            for (let index = 0; index < args.length; index += 1) {
+                if (args[index] !== '--ro-bind' || !['/etc/hosts', '/etc/resolv.conf'].includes(args[index + 2])) continue;
+                const source = args[index + 1];
+                assert.notEqual(source, args[index + 2]);
+                assert.equal(fs.statSync(path.dirname(source)).mode & 0o777, 0o700);
+                assert.deepEqual(fs.readFileSync(source), fs.readFileSync(args[index + 2]));
+                copies.push(source);
+            }
+            count += 1;
+            if (count === 1) throw new Error('probe spawn failed');
+            return success();
+        });
+        assert.equal(capability.mode, 'empty');
+        assert.ok(copies.length > 0);
+        for (const source of copies) assert.equal(fs.existsSync(source), false);
+    } finally {
+        fs.rmSync(f.root, { recursive: true, force: true });
+    }
+});
+
 test('empty proc is probed after every private failure without parsing diagnostics', () => {
     const f = fixture();
     const calls = [];
@@ -222,9 +248,11 @@ test('policy renders exactly the trusted selected proc mode without changing net
     };
     const privateArgs = buildBwrapArgs(validated, { ...common, procMode: 'private' });
     const emptyArgs = buildBwrapArgs(validated, { ...common, procMode: 'empty' });
-    assert.deepEqual(privateArgs.filter((value) => value !== '--proc'), emptyArgs.filter((value) => value !== '--dir'));
+    const procIndex = privateArgs.indexOf('--proc');
+    assert.equal(emptyArgs[procIndex], '--dir');
+    assert.deepEqual(privateArgs.toSpliced(procIndex, 1, '--dir'), emptyArgs);
     assert.ok(privateArgs.includes('--proc'));
-    assert.ok(!privateArgs.includes('--dir'));
+    assert.equal(privateArgs[privateArgs.indexOf('--dir') + 1], '/dev');
     assert.ok(emptyArgs.includes('--dir'));
     assert.ok(!emptyArgs.includes('--proc'));
     assert.ok(privateArgs.includes('--unshare-net'));
@@ -255,7 +283,7 @@ test('task entry point resolves capability before state, bundle, argument, or pr
         'stageFiles(dirs.workDir',
         'resolvedRuntimeBundle = resolveRuntimeBundle',
         'const args = buildBwrapArgs',
-        'const result = await runBwrap',
+        'result = await runBwrap',
     ]) {
         assert.ok(source.indexOf(laterBoundary) > capability, `${laterBoundary} must follow capability`);
     }

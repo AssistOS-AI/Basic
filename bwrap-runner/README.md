@@ -17,7 +17,7 @@ shim at `/usr/local/bin/bwrap-sandbox-exec` that runs the local sandbox CLI
 under the image's Node.js. Provider agents invoke that shim directly inside
 their own container; they do not call a remote `sandbox_exec` MCP tool.
 
-The manifest uses the concrete image reference
+The retained compatibility manifest uses the concrete image reference
 `assistos/bwrap-runner:node24-python-bookworm`. The image is based on Node
 24 Bookworm and also installs a generic Python 3 toolchain (`python3`,
 `python3-pip`, `python3-venv`, `python3-dev`, `python3-setuptools`,
@@ -38,11 +38,18 @@ unprivileged gates and is recorded by immutable digest. Keeping the declaration
 during this source-only phase prevents an unproven moving tag from being treated
 as rollout evidence.
 
+The replacement image composes pinned Node 24.20 and Python 3.12 Trixie bases,
+uses `USER 1000:1000`, and provides a writable `/var/lib/ploinky-bwrap-runner`
+and `/home/runner`. Providers install their runtimes below their own `HOME`;
+`/opt` remains image-owned. Rootless Podman uses
+`--userns=keep-id:uid=1000,gid=1000` to preserve access to provider-owned data.
+
 The canonical published image is built by manually dispatching
 `publish-bwrap-runner.yml` in `AssistOS-AI/container-image-builds`. That
 workflow checks out this repository as the build context, uses the centralized
 Dockerfile from `container-image-builds/images/bwrap-runner/Dockerfile`, and
-pushes to Docker Hub as `assistos/bwrap-runner:node24-python-bookworm` for both
+publishes a proven immutable candidate and optionally promotes the
+`assistos/bwrap-runner:node24-python-trixie` convenience tag for both
 `linux/amd64` and `linux/arm64`. It must not publish automatically on
 repository pushes. Local image builds are still useful for development smoke
 tests, but they are not the release publishing authority.
@@ -107,9 +114,14 @@ Default policy applied inside the inner sandbox:
 - `--clearenv` followed by `--setenv` for the validated allowlisted env
   only.
 - Read-only binds for `/usr`, `/lib`, `/lib64`, `/bin`, `/sbin`, and a
-  curated set of `/etc` files that exist in the image.
+  curated set of `/etc` files that exist in the image. `/etc/hosts` and
+  `/etc/resolv.conf` use private regular-file copies (at most 64 KiB each),
+  avoiding remounts of the OCI runtime's locked file mounts. Copies are outside
+  the writable job directories and removed after each probe or task.
 - Either `--proc /proc` for a proven private proc or `--dir /proc` for the
-  proven safe fallback, followed by `--dev /dev`, `--tmpfs /tmp`.
+  proven safe fallback, followed by a fresh `/dev` containing only read-write
+  device binds for `null`, `zero`, `random`, and `urandom`, and `--tmpfs /tmp`.
+  No outer proc or dev directory is bound; no new devpts mount is required.
 - Per-job read-write `/work` directory and a sibling `/outputs`
   directory, both created under
   `BWRAP_RUNNER_STATE/jobs/<jobId>/`.
@@ -188,12 +200,14 @@ task mutation with `PLOINKY_BWRAP_CAPABILITY_UNAVAILABLE`. This image cannot bak
 `kernel.unprivileged_userns_clone` in; operators must configure those
 settings on the host.
 
-`tests/integration/bwrapRunnerNative.mjs` is the publication gate for both
-private and empty proc modes. It intentionally has no skip path and executes a
-real command with the production policy, proves authorized work/output writes,
-and proves a sibling path is unavailable. Unit tests on hosts without
-Bubblewrap assert the deterministic unavailable contract rather than claiming
-native capability.
+`tests/integration/bwrapRunnerNative.mjs` has no skip path. Empty proc must
+execute a real command with the production policy, proving authorized writes,
+hidden sibling/source paths, read-only system files, the fixed device set, and
+environment clearing. Private proc must either pass those execution assertions
+or produce canonical evidence that only empty proc is available. The latter
+case also runs a real private-only task and requires typed terminal rejection
+before state creation or file staging. Its JSON distinguishes executed policies
+from unavailable ones. Open Interpreter retains its private minimum.
 
 ## Limitations
 

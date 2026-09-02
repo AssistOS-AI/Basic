@@ -55,6 +55,12 @@ flowchart LR
 
         <section>
             <h2>Agent Layout</h2>
+            <p>Research providers adopt a verified Bubblewrap runner image by digest.
+                Its Node 24 and Python 3.12 runtimes use Debian Trixie with a maintained
+                Git/libcurl stack. Native amd64 and arm64 publication gates verify
+                transport, unprivileged sandbox operation, and real provider setup.
+                Provider manifests must preserve the rootless confinement contract
+                described in <a href="specsLoader.html?spec=DS002-bwrap-runner-agent.md">DS002</a>.</p>
             <p>
                 Most existing agents are simple container or shell entries with
                 a single <code>manifest.json</code>. Agents with larger

@@ -85,7 +85,11 @@ test('default policy enables --unshare-net and a fixed isolation set', () => {
         }
         // /proc, /dev, /tmpfs handles are in place
         assert.strictEqual(findFlagValue(args, '--proc'), '/proc');
-        assert.strictEqual(findFlagValue(args, '--dev'), '/dev');
+        assert.strictEqual(findFlagValue(args, '--dir'), '/dev');
+        assert.equal(args.includes('--dev'), false);
+        assert.deepEqual(findAllFlagValues(args, '--dev-bind'), [
+            '/dev/null', '/dev/zero', '/dev/random', '/dev/urandom',
+        ]);
         assert.strictEqual(findFlagValue(args, '--tmpfs'), '/tmp');
         assert.strictEqual(findFlagValue(args, '--chdir'), '/work');
     } finally {

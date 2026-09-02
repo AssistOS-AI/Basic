@@ -1,3 +1,5 @@
+import { COPIED_SYSTEM_FILES } from './system-files.mjs';
+
 // Policy builder for the bwrap-runner sandbox_exec tool.
 //
 // All argv generation lives here so it can be unit tested without invoking
@@ -261,7 +263,10 @@ export function buildBwrapArgs(validated, paths) {
 
     for (const systemPath of SYSTEM_RO_PATHS) {
         if (existingPaths && !existingPaths.has(systemPath)) continue;
-        args.push('--ro-bind', systemPath, systemPath);
+        const source = COPIED_SYSTEM_FILES.includes(systemPath)
+            ? ensureAbsolutePath(`paths.systemFileSources[${systemPath}]`, paths.systemFileSources?.get(systemPath))
+            : systemPath;
+        args.push('--ro-bind', source, systemPath);
     }
 
     if (procMode === 'private') {
@@ -269,7 +274,12 @@ export function buildBwrapArgs(validated, paths) {
     } else {
         args.push('--dir', '/proc');
     }
-    args.push('--dev', '/dev');
+    // A fresh directory with only these character devices avoids creating a
+    // devpts instance (unavailable under some confined rootless OCI policies).
+    args.push('--dir', '/dev');
+    for (const device of ['null', 'zero', 'random', 'urandom']) {
+        args.push('--dev-bind', `/dev/${device}`, `/dev/${device}`);
+    }
     args.push('--tmpfs', '/tmp');
 
     args.push('--bind', workDir, '/work');

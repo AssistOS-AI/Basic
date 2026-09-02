@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { stageSystemFiles } from '../lib/system-files.mjs';
 import {
     POLICY_LIMITS,
     buildBwrapArgs,
@@ -379,15 +380,21 @@ async function main() {
         return;
     }
 
-    const args = buildBwrapArgs(validated, {
-        workDir: dirs.workDir,
-        outputsDir: dirs.outputsDir,
-        existingSystemPaths: existingSystemPathsSet(),
-        runtimeBundle: resolvedRuntimeBundle,
-        procMode: capability.mode,
-    });
-
-    const result = await runBwrap(capability.binaryIdentity.realpath, args, validated, validated.limits);
+    const systemFiles = stageSystemFiles({ temporaryRoot: dirs.jobRoot });
+    let result;
+    try {
+        const args = buildBwrapArgs(validated, {
+            workDir: dirs.workDir,
+            outputsDir: dirs.outputsDir,
+            existingSystemPaths: existingSystemPathsSet(),
+            systemFileSources: systemFiles.sources,
+            runtimeBundle: resolvedRuntimeBundle,
+            procMode: capability.mode,
+        });
+        result = await runBwrap(capability.binaryIdentity.realpath, args, validated, validated.limits);
+    } finally {
+        systemFiles.cleanup();
+    }
     const stdout = truncateOutput(
         result.stdoutBuffer || Buffer.alloc(0),
         validated.limits.maxStdoutBytes,
