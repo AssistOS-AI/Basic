@@ -42,13 +42,10 @@
             <h2>Runtime Shape</h2>
             <p>
                 The manifest runs through normal Ploinky container execution.
-                The container image is the concrete reference
-                <code>assistos/bwrap-runner:node24-python-bookworm</code>,
-                built from <code>node:24.15.0-bookworm-slim</code>. The image
-                ships bubblewrap, Node.js, a generic Python toolchain
-                (<code>python3</code>,
-                <code>python3-pip</code>, <code>python3-venv</code>,
-                <code>python3-dev</code>, build helpers) so provider agents can
+                The container image is the verified immutable reference
+                <code>docker.io/assistos/bwrap-runner@sha256:9b6c08cf78fd0a29acfbe2e45ea2ee26efe6fde49c7f3db8b3aadfa30f2d53f8</code>,
+                composed from pinned Node 24.20 and Python 3.12 Trixie bases.
+                The image ships bubblewrap, pip, venv, headers, and build helpers so provider agents can
                 prepare Python runtimes compatible with the runner's Python
                 ABI on macOS and Linux hosts. The image deliberately does
                 <strong>not</strong>
@@ -58,13 +55,15 @@
                 <code>BWRAP_RUNNER_IMAGE</code> and
                 runs
                 <code>scripts/build-image.sh</code> as a host preinstall hook
-                so a missing local image is built from the sibling
-                <code>container-image-builds</code> checkout when available, or
-                pulled from Docker Hub before container creation.
-                Provider manifests that spawn inner bwrap jobs must request
-                <code>containerSecurity.privileged: true</code> because each
-                provider container is itself a sandbox host for inner
-                bubblewrap jobs. The published image installs the reusable
+                to pull that exact digest when it is missing locally. A failed
+                pull fails installation; a digest is never rebuilt locally.
+                Explicit development tags may build from the sibling
+                <code>container-image-builds</code> checkout.
+                The Basic manifest has no privileged declaration. The image
+                runs as <code>1000:1000</code>; native publication checks use rootless Podman with
+                <code>--userns=keep-id:uid=1000,gid=1000</code> with all
+                capabilities dropped and <code>no-new-privileges</code>.
+                The published image installs the reusable
                 local runner at <code>/opt/bwrap-runner/bin/</code> and
                 <code>/opt/bwrap-runner/lib/</code>, plus an executable shim
                 at <code>/usr/local/bin/bwrap-sandbox-exec</code>. Provider
@@ -80,6 +79,16 @@
                 pushes to Docker Hub for both <code>linux/amd64</code> and
                 <code>linux/arm64</code>, and must not publish automatically
                 on repository pushes.
+            </p>
+            <p>
+                <a href="https://github.com/AssistOS-AI/container-image-builds/actions/runs/33662621018">Publication run 33662621018</a>
+                proved Git transport and actual empty-proc sandbox boundaries
+                on native amd64 and arm64, plus typed private-proc unavailability,
+                Open Interpreter preparation and Box 422, and GPTResearcher
+                cold setup and readiness. Empty proc satisfies the generic
+                runner's default contract. Open Interpreter retains its
+                separate compatibility marker and strict private requirement;
+                this image proof does not certify its private-proc execution.
             </p>
             <pre class="mermaid">
 sequenceDiagram
