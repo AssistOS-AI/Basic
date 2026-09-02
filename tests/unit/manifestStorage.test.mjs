@@ -10,6 +10,24 @@ function readManifest(agentName) {
     return JSON.parse(fs.readFileSync(path.join(repoRoot, agentName, 'manifest.json'), 'utf8'));
 }
 
+function assertManifestStorage(manifest, agentName) {
+    const sections = [['root', manifest], ...Object.entries(manifest.profiles || {})];
+    for (const [profileName, section] of sections) {
+        const label = `${agentName}/${profileName}`;
+        for (const [hostPath, containerPath] of Object.entries(section?.volumes || {})) {
+            const normalized = path.posix.normalize(hostPath);
+            assert.equal(path.posix.isAbsolute(hostPath), false, `${label}: host volume must be workspace-relative`);
+            assert.equal(normalized, hostPath, `${label}: host volume must already be normalized`);
+            assert.equal(
+                normalized.startsWith('.data/'),
+                true,
+                `${label}: writable host volume must be beneath .data: ${hostPath}`,
+            );
+            assert.equal(path.posix.isAbsolute(containerPath), true, `${label}: container volume must be absolute`);
+        }
+    }
+}
+
 test('all manifest-declared writable host volumes are positively classified beneath .data', () => {
     const manifests = fs.readdirSync(repoRoot, { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
@@ -18,16 +36,23 @@ test('all manifest-declared writable host volumes are positively classified bene
 
     for (const [agentName, manifestPath] of manifests) {
         const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-        for (const [hostPath, containerPath] of Object.entries(manifest.volumes || {})) {
-            const normalized = path.posix.normalize(hostPath);
-            assert.equal(path.posix.isAbsolute(hostPath), false, `${agentName}: host volume must be workspace-relative`);
-            assert.equal(normalized, hostPath, `${agentName}: host volume must already be normalized`);
-            assert.equal(
-                normalized.startsWith('.data/'),
-                true,
-                `${agentName}: writable host volume must be beneath .data: ${hostPath}`,
-            );
-            assert.equal(path.posix.isAbsolute(containerPath), true, `${agentName}: container volume must be absolute`);
+        assertManifestStorage(manifest, agentName);
+    }
+});
+
+test('the storage inventory rejects profile-only violations with or without root volumes', () => {
+    for (const profileName of ['default', 'dev', 'qa', 'prod']) {
+        for (const root of [{}, { volumes: { '.data/demo/root': '/data' } }]) {
+            for (const hostPath of ['.ploinky/data/demo', '.ploinky/shared', 'demo-data', '.data/../escaped']) {
+                assert.throws(() => assertManifestStorage({
+                    ...root,
+                    profiles: { [profileName]: { volumes: { [hostPath]: '/cache' } } },
+                }, 'demo'), { code: 'ERR_ASSERTION' });
+            }
+            assert.doesNotThrow(() => assertManifestStorage({
+                ...root,
+                profiles: { [profileName]: { volumes: { '.data/demo/cache': '/cache' } } },
+            }, 'demo'));
         }
     }
 });
